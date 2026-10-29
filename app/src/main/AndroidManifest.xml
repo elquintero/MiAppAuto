@@ -25,6 +25,12 @@
             </intent-filter>
         </service>
 
+        <!-- Sirve las carátulas a Android Auto -->
+        <provider
+            android:name=".CaratulasProvider"
+            android:authorities="com.example.miappauto.caratulas"
+            android:exported="true" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -5,7 +5,10 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.LibraryParams
@@ -47,16 +50,36 @@ class MusicService : MediaLibraryService() {
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
             val hijos: List<MediaItem> = when {
                 parentId == "raiz" -> listOf(
-                    Biblioteca.carpeta("cola", "Cola de reproducción", "${Biblioteca.queue.size} vídeos"),
+                    Biblioteca.carpeta("cola", "Cola", "${Biblioteca.queue.size} vídeos"),
+                    Biblioteca.carpeta("ahora", "Sonando ahora"),
                     Biblioteca.carpeta("lib", "Biblioteca", "${Biblioteca.lib.size} vídeos")
                 )
-                parentId == "cola" -> Biblioteca.itemsDeCola()
+                parentId == "cola" ->
+                    if (Biblioteca.queue.isEmpty())
+                        listOf(Biblioteca.aviso("La cola está vacía. Añade vídeos desde la app del móvil."))
+                    else Biblioteca.itemsDeCola(conContexto = true)
+                parentId == "ahora" -> {
+                    val p = session.player
+                    if (p.mediaItemCount == 0) {
+                        listOf(Biblioteca.aviso("No hay nada sonando todavía."))
+                    } else {
+                        (0 until p.mediaItemCount).map {
+                            val m = p.getMediaItemAt(it)
+                            m.buildUpon().setMediaId(Biblioteca.idContexto("a", m.mediaId)).build()
+                        }
+                    }
+                }
                 parentId == "lib" -> Biblioteca.lib.values
                     .groupBy { it.perf }
                     .toSortedMap(String.CASE_INSENSITIVE_ORDER)
-                    .map { (perf, vs) -> Biblioteca.carpeta("perf:$perf", perf, "${vs.size} vídeos") }
-                parentId.startsWith("perf:") ->
-                    Biblioteca.delInterprete(parentId.removePrefix("perf:")).map { Biblioteca.itemDe(it) }
+                    .map { (perf, vs) ->
+                        Biblioteca.carpeta("perf:$perf", perf, "${vs.size} vídeos", Caratulas.uri(perf))
+                    }
+                parentId.startsWith("perf:") -> {
+                    val perf = parentId.removePrefix("perf:")
+                    Biblioteca.delInterprete(perf)
+                        .map { Biblioteca.itemDe(it, Biblioteca.idContexto("p", it.k, perf)) }
+                }
                 else -> emptyList()
             }
             val pagina = if (pageSize > 0 && pageSize < Int.MAX_VALUE)
@@ -67,7 +90,7 @@ class MusicService : MediaLibraryService() {
         }
 
         // Cuando alguien (Android Auto o la pantalla del móvil) elige una pista,
-        // se monta la lista de reproducción completa y se empieza por la elegida.
+        // se monta la lista de reproducción de la lista de origen y se empieza por la elegida.
         override fun onSetMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -75,37 +98,22 @@ class MusicService : MediaLibraryService() {
             startIndex: Int,
             startPositionMs: Long
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
-            val resultado: MediaSession.MediaItemsWithStartPosition
-            if (mediaItems.size == 1) {
-                val id = mediaItems[0].mediaId
-                val posCola = Biblioteca.queue.indexOf(id)
-                val video = Biblioteca.lib[id]
-                if (posCola >= 0) {
-                    playlistEsCola = true
-                    resultado = MediaSession.MediaItemsWithStartPosition(
-                        Biblioteca.itemsDeCola(), posCola, 0L
-                    )
-                } else if (video != null) {
-                    playlistEsCola = false
-                    val grupo = Biblioteca.delInterprete(video.perf)
-                    resultado = MediaSession.MediaItemsWithStartPosition(
-                        grupo.map { Biblioteca.itemDe(it) },
-                        grupo.indexOfFirst { it.k == id }.coerceAtLeast(0),
-                        0L
-                    )
+            val resultado: MediaSession.MediaItemsWithStartPosition =
+                if (mediaItems.size == 1) {
+                    elegida(mediaSession.player, mediaItems[0])
+                        ?: MediaSession.MediaItemsWithStartPosition(
+                            mediaItems, startIndex, startPositionMs
+                        )
                 } else {
-                    resultado = MediaSession.MediaItemsWithStartPosition(
-                        mediaItems, startIndex, startPositionMs
+                    playlistEsCola = true
+                    MediaSession.MediaItemsWithStartPosition(
+                        mediaItems.map { m ->
+                            Biblioteca.lib[m.mediaId]?.let { Biblioteca.itemDe(it) } ?: m
+                        },
+                        startIndex,
+                        startPositionMs
                     )
                 }
-            } else {
-                playlistEsCola = true
-                resultado = MediaSession.MediaItemsWithStartPosition(
-                    mediaItems.map { m -> Biblioteca.lib[m.mediaId]?.let { Biblioteca.itemDe(it) } ?: m },
-                    startIndex,
-                    startPositionMs
-                )
-            }
             return Futures.immediateFuture(resultado)
         }
 
@@ -121,12 +129,68 @@ class MusicService : MediaLibraryService() {
         }
     }
 
+    /** Decide qué lista reproducir según de dónde viene la pista pulsada (cola, sonando ahora o intérprete). */
+    private fun elegida(player: Player, pedido: MediaItem): MediaSession.MediaItemsWithStartPosition? {
+        val partes = pedido.mediaId.split(Biblioteca.SEP, limit = 3)
+        val ctx = if (partes.size >= 2 && partes[0] in listOf("q", "a", "p")) partes[0] else ""
+        val perf = if (ctx == "p" && partes.size == 3) partes[1] else null
+        val k = when (ctx) {
+            "p" -> partes.getOrNull(2) ?: return null
+            "q", "a" -> partes[1]
+            else -> pedido.mediaId
+        }
+        val video = Biblioteca.lib[k]
+
+        if (ctx == "a") {
+            val actuales = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
+            val i = actuales.indexOfFirst { it.mediaId == k }
+            if (i >= 0) return MediaSession.MediaItemsWithStartPosition(actuales, i, 0L)
+        }
+        if (ctx == "p" && perf != null && video != null) {
+            playlistEsCola = false
+            return grupo(perf, k)
+        }
+        // Cola ("q") o identificador sin contexto
+        val posCola = Biblioteca.queue.indexOf(k)
+        if (posCola >= 0) {
+            playlistEsCola = true
+            return MediaSession.MediaItemsWithStartPosition(Biblioteca.itemsDeCola(), posCola, 0L)
+        }
+        if (video != null) {
+            playlistEsCola = false
+            return grupo(video.perf, k)
+        }
+        return null
+    }
+
+    private fun grupo(perf: String, k: String): MediaSession.MediaItemsWithStartPosition {
+        val g = Biblioteca.delInterprete(perf)
+        return MediaSession.MediaItemsWithStartPosition(
+            g.map { Biblioteca.itemDe(it) },
+            g.indexOfFirst { it.k == k }.coerceAtLeast(0),
+            0L
+        )
+    }
+
     override fun onCreate() {
         super.onCreate()
         instancia = this
         Biblioteca.cargar(applicationContext)
 
+        // Más margen de red: tiempos de espera largos y buffer amplio (útil con cobertura irregular en carretera)
+        val http = DefaultHttpDataSource.Factory()
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(20_000)
+            .setAllowCrossProtocolRedirects(true)
+
+        val carga = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(60_000, 180_000, 5_000, 10_000)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
         val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(http))
+            .setLoadControl(carga)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -166,16 +230,20 @@ class MusicService : MediaLibraryService() {
         session = MediaLibrarySession.Builder(this, player, callback).build()
     }
 
-    /** La web cambió la biblioteca o la cola: se ajusta el reproductor sin cortar la pista actual. */
-    fun alCambiarBiblioteca() {
+    /** La web cambió la biblioteca, la cola o una carátula: se ajusta el reproductor sin cortar la pista actual. */
+    fun alCambiarBiblioteca(perf: String? = null) {
         val s = session ?: return
         val p = s.player
         p.shuffleModeEnabled = Biblioteca.shuffle
         p.repeatMode = if (Biblioteca.repeat) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
         if (playlistEsCola && p.mediaItemCount > 0) reconciliar(p)
         runCatching {
+            s.notifyChildrenChanged("raiz", 3, null)
             s.notifyChildrenChanged("cola", Biblioteca.queue.size, null)
             s.notifyChildrenChanged("lib", Biblioteca.lib.size, null)
+            if (perf != null) {
+                s.notifyChildrenChanged("perf:$perf", Biblioteca.delInterprete(perf).size, null)
+            }
         }
     }
 

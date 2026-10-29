@@ -1,6 +1,7 @@
 package com.example.miappauto
 
 import android.content.Context
+import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -13,6 +14,9 @@ import java.io.File
  * incluso cuando la pantalla de la app no está abierta (se guarda en un archivo).
  */
 object Biblioteca {
+
+    /** Separador para los identificadores de las listas de Android Auto (indican de qué lista viene cada pista). */
+    const val SEP = "§"
 
     data class Video(
         val k: String,
@@ -49,6 +53,7 @@ object Biblioteca {
 
     @Synchronized
     fun cargar(ctx: Context) {
+        Caratulas.cargar(ctx)
         if (cargado) return
         cargado = true
         val f = File(ctx.filesDir, ARCHIVO)
@@ -102,14 +107,18 @@ object Biblioteca {
     fun delInterprete(perf: String): List<Video> =
         lib.values.filter { it.perf == perf }.sortedWith(compareBy({ it.edition }, { it.s }))
 
-    fun itemsDeCola(): List<MediaItem> =
-        queue.mapNotNull { lib[it] }.map { itemDe(it) }
+    /** Cola de la web, con identificadores "q§clave" para que Android Auto sepa de qué lista viene. */
+    fun itemsDeCola(conContexto: Boolean = false): List<MediaItem> =
+        queue.mapNotNull { lib[it] }.map { itemDe(it, if (conContexto) idContexto("q", it.k) else it.k) }
 
-    fun itemDe(v: Video): MediaItem {
+    fun idContexto(ctx: String, k: String, perf: String? = null): String =
+        if (perf == null) "$ctx$SEP$k" else "$ctx$SEP$perf$SEP$k"
+
+    fun itemDe(v: Video, id: String = v.k): MediaItem {
         val album = listOf(v.stage, v.edition).filter { it.isNotEmpty() }
             .joinToString(" · ").ifEmpty { "Concurso Chopin" }
         return MediaItem.Builder()
-            .setMediaId(v.k)
+            .setMediaId(id)
             .setUri(v.url)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setMediaMetadata(
@@ -117,6 +126,7 @@ object Biblioteca {
                     .setTitle(v.title)
                     .setArtist(v.perf)
                     .setAlbumTitle(album)
+                    .setArtworkUri(Caratulas.uri(v.perf))
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
@@ -124,16 +134,29 @@ object Biblioteca {
             ).build()
     }
 
-    fun carpeta(id: String, titulo: String, subtitulo: String? = null): MediaItem =
+    fun carpeta(id: String, titulo: String, subtitulo: String? = null, imagen: Uri? = null): MediaItem =
         MediaItem.Builder()
             .setMediaId(id)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(titulo)
                     .setSubtitle(subtitulo)
+                    .setArtworkUri(imagen)
                     .setIsBrowsable(true)
                     .setIsPlayable(false)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                    .build()
+            ).build()
+
+    /** Elemento informativo (ni carpeta ni pista), para listas vacías. */
+    fun aviso(texto: String): MediaItem =
+        MediaItem.Builder()
+            .setMediaId("aviso")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(texto)
+                    .setIsBrowsable(false)
+                    .setIsPlayable(false)
                     .build()
             ).build()
 }

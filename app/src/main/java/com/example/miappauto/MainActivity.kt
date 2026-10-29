@@ -5,19 +5,23 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.webkit.JavascriptInterface
 import android.webkit.JsResult
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
 
@@ -25,6 +29,27 @@ class MainActivity : ComponentActivity() {
     private var futuro: ListenableFuture<MediaController>? = null
     private var control: MediaController? = null
     private var pendiente: Int? = null
+    private var perfPendiente: String? = null
+
+    // Selector de imágenes del móvil para las carátulas
+    private val selector = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        val perf = perfPendiente
+        perfPendiente = null
+        if (uri != null && perf != null) {
+            Thread {
+                val ok = Caratulas.guardar(applicationContext, perf, uri)
+                runOnUiThread {
+                    if (ok) {
+                        MusicService.instancia?.alCambiarBiblioteca(perf)
+                        avisarCaratula(perf)
+                        Toast.makeText(this, "Carátula guardada", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "No se pudo usar esa imagen", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
+        }
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,10 +125,19 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    // Avisa a la página de qué pista suena y si está en marcha (para que su interfaz no se desfase)
+    // Avisa a la página de qué pista de SU cola suena y si está en marcha (para que su interfaz no se desfase)
     private fun avisarWeb(p: Player) {
-        val i = if (p.mediaItemCount > 0) p.currentMediaItemIndex else -1
+        val id = p.currentMediaItem?.mediaId
+        val i = if (id == null) -1 else Biblioteca.queue.indexOf(id)
         web.evaluateJavascript("window.__nativeState&&__nativeState($i,${p.isPlaying})", null)
+    }
+
+    // Avisa a la página de la miniatura de carátula de un intérprete ("" = sin carátula)
+    private fun avisarCaratula(perf: String) {
+        val mini = Caratulas.miniatura(applicationContext, perf) ?: ""
+        web.evaluateJavascript(
+            "window.__cover&&__cover(${JSONObject.quote(perf)},${JSONObject.quote(mini)})", null
+        )
     }
 
     private fun reproducir(i: Int) {
@@ -167,5 +201,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        @JavascriptInterface
+        fun pickCover(perf: String) {
+            runOnUiThread {
+                perfPendiente = perf
+                selector.launch("image/*")
+            }
+        }
+
+        @JavascriptInterface
+        fun removeCover(perf: String) {
+            Caratulas.quitar(applicationContext, perf)
+            runOnUiThread {
+                MusicService.instancia?.alCambiarBiblioteca(perf)
+                avisarCaratula(perf)
+            }
+        }
+
+        @JavascriptInterface
+        fun getCovers(): String = Caratulas.todasMiniaturas(applicationContext)
     }
 }

@@ -154,6 +154,7 @@ code{font:12px ui-monospace,Consolas,monospace;background:var(--soft);border:1px
   details.g>summary{padding:14px 18px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.cv{width:28px;height:28px;border-radius:5px;object-fit:cover;vertical-align:middle;margin-right:8px}
 </style>
 </head>
 <body>
@@ -411,6 +412,8 @@ const $=s=>document.querySelector(s),V=$('#v'),KEY='chopin-biblioteca-v1',NOP='S
 let lib={},queue=[],cur=-1,shuffle=false,repeat=true,hls=null,fails=0,open=new Set(),F={q:'',ed:'',st:''};
 
 const APP=!!window.AndroidBridge; // true solo dentro de la app Android
+let COV={};if(APP){try{COV=JSON.parse(AndroidBridge.getCovers()||'{}')}catch(e){}}
+window.__cover=(p,d)=>{if(d)COV[p]=d;else delete COV[p];render()};
 const save=()=>{const s=JSON.stringify({lib,queue,cur,shuffle,repeat});try{localStorage.setItem(KEY,s)}catch(e){}try{if(APP)AndroidBridge.sync(s)}catch(e){}};
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){lib=d.lib||{};queue=(d.queue||[]).filter(k=>lib[k]);cur=Math.min(d.cur??-1,queue.length-1);shuffle=!!d.shuffle;repeat=d.repeat!==false}}catch(e){}}
 function msg(t,err){const m=$('#msg');m.textContent=t||'';m.className=err?'err':''}
@@ -531,12 +534,19 @@ function render(){
   gs.forEach(([name,arr])=>{
     const d=document.createElement('details');d.className='g';d.open=open.has(name)||gs.length===1;
     d.addEventListener('toggle',()=>{d.open?open.add(name):open.delete(name)});
-    const sm=document.createElement('summary');sm.textContent=`${name} (${arr.length})`;d.append(sm);
+    const sm=document.createElement('summary');
+    if(COV[name]){const im=document.createElement('img');im.src=COV[name];im.className='cv';im.alt='';sm.append(im)}
+    sm.append(document.createTextNode(`${name} (${arr.length})`));d.append(sm);
     const tl=document.createElement('div');tl.className='tools';
     const pa=document.createElement('button');pa.className='main';pa.textContent='Reproducir todo';pa.onclick=()=>playKeys(arr.map(v=>v.k),0);
     const ad=document.createElement('button');ad.textContent='Añadir a la cola';ad.onclick=()=>enqueue(arr.map(v=>v.k));
     const rm=document.createElement('button');rm.textContent='Quitar intérprete';rm.onclick=()=>{if(confirm(`¿Quitar a ${name} y sus ${arr.length} vídeos de la biblioteca?`))arr.forEach(v=>removeItem(v.k,true))};
-    tl.append(pa,ad,rm);d.append(tl);
+    tl.append(pa,ad,rm);
+    if(APP){
+      const cv=document.createElement('button');cv.textContent='Carátula';cv.onclick=()=>AndroidBridge.pickCover(name);tl.append(cv);
+      if(COV[name]){const qc=document.createElement('button');qc.textContent='Quitar carátula';qc.onclick=()=>AndroidBridge.removeCover(name);tl.append(qc)}
+    }
+    d.append(tl);
     arr.forEach((v,i)=>{
       const r=document.createElement('div');r.className='it'+(queue[cur]===v.k?' on':'');r.tabIndex=0;
       const t=document.createElement('span');t.textContent=v.title;
