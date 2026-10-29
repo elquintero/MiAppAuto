@@ -8,7 +8,8 @@
 
     <application
         android:label="Biblioteca Chopin"
-        android:icon="@drawable/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher">
 
         <!-- Declara la app como "media" para Android Auto -->
         <meta-data

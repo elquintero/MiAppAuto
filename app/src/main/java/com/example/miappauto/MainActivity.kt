@@ -221,5 +221,22 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun getCovers(): String = Caratulas.todasMiniaturas(applicationContext)
+
+        // Diagnóstico: reúne el estado del reproductor y descarga las listas del stream actual
+        @JavascriptInterface
+        fun diag() {
+            runOnUiThread {
+                val estado = MusicService.instancia?.textoDiagnostico()
+                    ?: "El servicio de reproducción no está iniciado. Reproduce algo y vuelve a probar."
+                val id = control?.currentMediaItem?.mediaId ?: Biblioteca.queue.firstOrNull()
+                val url = id?.let { Biblioteca.lib[it]?.url } ?: Biblioteca.lib.values.firstOrNull()?.url
+                Thread {
+                    val texto = estado + "\n\n" + Diagnostico.listas(url)
+                    runOnUiThread {
+                        web.evaluateJavascript("window.__diag(${JSONObject.quote(texto)})", null)
+                    }
+                }.start()
+            }
+        }
     }
 }

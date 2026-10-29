@@ -8,6 +8,9 @@ import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -17,6 +20,7 @@ import androidx.media3.session.MediaSession
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import java.io.IOException
 
 class MusicService : MediaLibraryService() {
 
@@ -213,11 +217,13 @@ class MusicService : MediaLibraryService() {
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                Diagnostico.evento("estado: ${Diagnostico.nombreEstado(playbackState)}")
                 if (playbackState == Player.STATE_READY) fallos = 0
             }
 
             // Enlace caducado o caído: pasa al siguiente, y se detiene tras tres fallos seguidos
             override fun onPlayerError(error: PlaybackException) {
+                Diagnostico.evento("ERROR ${error.errorCodeName}: ${error.message}")
                 fallos++
                 if (fallos < 3 && player.mediaItemCount > 1) {
                     player.seekToNextMediaItem()
@@ -227,7 +233,42 @@ class MusicService : MediaLibraryService() {
             }
         })
 
+        // Registro de descargas para el diagnóstico
+        player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onLoadCompleted(
+                eventTime: AnalyticsListener.EventTime,
+                loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData
+            ) {
+                val f = mediaLoadData.trackFormat
+                val resumen = f?.let { "${it.sampleMimeType ?: ""} ${it.codecs ?: ""} ${if (it.bitrate > 0) "${it.bitrate / 1000} kbps" else ""}".trim() }
+                Diagnostico.carga(
+                    mediaLoadData.trackType,
+                    mediaLoadData.dataType,
+                    loadEventInfo.bytesLoaded,
+                    loadEventInfo.loadDurationMs,
+                    resumen
+                )
+            }
+
+            override fun onLoadError(
+                eventTime: AnalyticsListener.EventTime,
+                loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData,
+                error: IOException,
+                wasCanceled: Boolean
+            ) {
+                Diagnostico.errorDeCarga(error.toString())
+            }
+        })
+
         session = MediaLibrarySession.Builder(this, player, callback).build()
+    }
+
+    /** Texto de diagnóstico del reproductor (hilo principal). */
+    fun textoDiagnostico(): String {
+        val p = session?.player ?: return "El reproductor no está iniciado. Reproduce algo y vuelve a probar."
+        return Diagnostico.estado(p)
     }
 
     /** La web cambió la biblioteca, la cola o una carátula: se ajusta el reproductor sin cortar la pista actual. */
