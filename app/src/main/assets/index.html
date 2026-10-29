@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="color-scheme" content="light">
+<title>Biblioteca · Concurso Chopin</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Chopin">
+<style>
+:root{
+  --bg:#fff;--soft:#f5f6f7;--fg:#14171a;--mut:#667085;--card:#fff;--line:#e4e7ec;
+  --acc:#14171a;--accd:#14171a;--prim:#000;--primfg:#fff;--now:#f0f1f3;--err:#b3261e;
+  --shadow:none;
+  color-scheme:light;--pad:clamp(14px,4vw,40px);--r:16px;
+  --sans:"Inter","Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;overflow-anchor:none}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans);-webkit-tap-highlight-color:transparent}
+
+/* Cabecera */
+header{padding:0 0 4px}
+.hd{padding:20px max(var(--pad),env(safe-area-inset-right)) 4px max(var(--pad),env(safe-area-inset-left))}
+h1{margin:0;font:650 clamp(24px,4.4vw,34px)/1.12 var(--sans);letter-spacing:-.025em}
+.hd p{margin:6px 0 0;color:var(--mut)}
+
+/* Rejilla principal */
+main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:20px;align-items:start;
+  padding:14px max(var(--pad),env(safe-area-inset-right)) 48px max(var(--pad),env(safe-area-inset-left))}
+
+/* Reproductor */
+.stage{position:sticky;top:0;z-index:5;background:var(--bg);padding:2px 0 10px}
+video{display:block;width:100%;aspect-ratio:16/9;border-radius:var(--r);box-shadow:var(--shadow);
+  background:#000}
+#now{margin:12px 0 0;font:600 clamp(17px,2.4vw,20px)/1.3 var(--sans);letter-spacing:-.01em;min-height:1.3em}
+#sub{color:var(--mut);font-size:13px;min-height:1.3em}
+#msg{font-size:13px;color:var(--mut)}#msg:empty{display:none}#msg.err{color:var(--err)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.ctl.main3{display:grid;grid-template-columns:1fr 1.4fr 1fr}
+
+/* Botones y campos (formas de píldora, como en la web) */
+button{font:inherit;font-weight:500;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:999px;
+  padding:8px 16px;min-height:40px;cursor:pointer;transition:border-color .15s,background .15s,opacity .15s}
+button:hover{border-color:var(--acc)}
+button:active{opacity:.8}
+button.main{background:var(--prim);color:var(--primfg);border-color:var(--prim);font-weight:600}
+button.main:hover{opacity:.9}
+button.danger{color:var(--err)}
+button[aria-pressed=true]{background:var(--now);border-color:var(--accd);color:var(--fg)}
+button.s{width:34px;height:34px;min-height:0;padding:0;display:inline-grid;place-items:center;font-size:18px;line-height:1}
+button.chip{min-height:34px;padding:4px 14px;font-size:14px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:9px 14px;min-width:0}
+input:hover,select:hover,textarea:hover{border-color:var(--acc)}
+select{max-width:100%}
+
+/* Paneles */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:16px;box-shadow:var(--shadow)}
+.bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px 10px 18px;border-bottom:1px solid var(--line);gap:8px;flex-wrap:wrap}
+.bar b{font-weight:650}
+.qtools{display:flex;gap:6px;flex-wrap:wrap}
+.tools{display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+#q2{flex:1 1 100%}
+.tools select{flex:1 1 calc(50% - 4px)}
+#lib{max-height:60vh;overflow:auto;overscroll-behavior:contain}
+
+/* Desplegables con flecha propia */
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";flex:none;width:7px;height:7px;margin-right:12px;border-right:2px solid var(--mut);border-bottom:2px solid var(--mut);transform:rotate(-45deg);transition:transform .15s}
+details[open]>summary::before{transform:rotate(45deg)}
+details.g>summary{display:flex;align-items:center;padding:12px 18px;font-weight:650;border-bottom:1px solid var(--line);background:var(--soft)}
+details.d{padding:0}
+details.d>summary{display:flex;align-items:center;padding:14px 18px;font-weight:650}
+details.d[open]>summary{border-bottom:1px solid var(--line)}
+.dbody{padding:12px 18px 16px}
+details.d+details.d{border-top:1px solid var(--line)}
+
+/* Filas de la biblioteca y de la cola */
+.it{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:9px 14px 9px 18px;border-bottom:1px solid var(--line);cursor:pointer}
+.it:hover{background:var(--soft)}
+.it.on,#q li.on{background:var(--now);box-shadow:inset 3px 0 0 var(--acc)}
+.it small{display:block;color:var(--mut);font-size:12px}
+#q{position:relative;list-style:none;margin:0;padding:0;max-height:26vh;overflow:auto;overscroll-behavior:contain}
+#q li{padding:9px 18px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}
+#q li.on{font-weight:600}
+.empty{padding:18px;color:var(--mut)}
+
+/* Temporizador de reposo */
+.sleep{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:10px 14px 10px 18px;border-bottom:1px solid var(--line)}
+.sleep label{font-weight:500}
+.sleep select{flex:0 1 auto}
+#slpst{font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+
+/* Ruido blanco y volúmenes */
+.vol{display:flex;align-items:center;gap:8px 12px;padding:10px 14px 10px 18px;border-bottom:1px solid var(--line)}
+.vol label{flex:0 0 9.5rem;font-weight:500}
+.vol input[type=range]{flex:1;min-width:0;padding:0;border:0;background:none;accent-color:var(--acc);height:28px}
+.vol output{flex:0 0 2.6em;text-align:right;color:var(--mut);font-size:13px;font-variant-numeric:tabular-nums}
+.vol.chk label{flex:1 1 auto;display:flex;align-items:center;gap:10px;font-weight:400;cursor:pointer}
+.vol input[type=checkbox]{width:18px;height:18px;padding:0;border:0;min-width:0;accent-color:var(--acc)}
+.vol select{flex:1;min-width:0}
+#nzmsg{margin:0;padding:8px 18px 14px;font-size:13px;color:var(--mut)}#nzmsg:empty{display:none}#nzmsg.err{color:var(--err)}
+@media(max-width:520px){.vol label{flex-basis:7.5rem}}
+
+/* Código de consola */
+.steps{margin:0 0 4px;padding-left:20px;color:var(--mut);font-size:13px}
+.steps li{margin:2px 0}
+ul.steps{list-style:none;padding-left:0;font-size:14px;color:var(--fg)}
+ul.steps li{margin:6px 0}
+.codebar{display:flex;align-items:center;gap:12px;margin:12px 0 10px}
+#cpyst{font-size:13px;color:var(--mut);min-height:1.2em}
+pre{white-space:pre-wrap;word-break:break-all;background:var(--soft);border:1px solid var(--line);border-radius:12px;
+  padding:10px 12px;font:11px/1.45 ui-monospace,Consolas,monospace;margin:0;max-height:11rem;overflow:auto}
+textarea{width:100%;min-height:120px;margin:0 0 10px;border-radius:12px;font:12px/1.45 ui-monospace,Consolas,monospace}
+.hint{color:var(--mut);font-size:13px;margin:0 0 10px}
+code{font:12px ui-monospace,Consolas,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:1px 5px}
+
+/* Escritorio: cabecera de grupo fija dentro de la lista */
+@media(min-width:901px){details.g>summary{position:sticky;top:0;z-index:1}}
+
+/* Móvil y tableta */
+@media(max-width:900px){
+  main{grid-template-columns:minmax(0,1fr);gap:0;padding-top:0}
+  main>section{display:contents}
+  .stage{order:0;margin:0 calc(-1*var(--pad));padding:8px max(var(--pad),env(safe-area-inset-right)) 10px max(var(--pad),env(safe-area-inset-left));
+    border-bottom:1px solid var(--line);}
+  video{max-height:32vh;border-radius:12px;box-shadow:none}
+  #now{margin-top:8px;font-size:16px}
+  #now,#sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  main>aside{order:1;margin-top:16px}
+  .qp{order:2}
+  #lib{max-height:none;overflow:visible}
+  input,select,textarea{font-size:16px}
+  .codebar button{flex:1}
+}
+@media(max-width:520px){.tools select{flex-basis:100%}}
+@media(max-width:900px) and (max-height:520px){.stage{position:static;box-shadow:none}video{max-height:60vh}}
+
+/* Pantallas táctiles: objetivos de 44 px */
+@media(pointer:coarse){
+  button{min-height:44px}
+  button.s{width:44px;height:44px}
+  button.chip{min-height:40px}
+  .it{gap:10px}
+  #q li{padding:12px 18px}
+  details.g>summary{padding:14px 18px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="hd">
+    <h1>Biblioteca del Concurso Chopin</h1>
+    <p>Vídeos ordenados por intérprete, con cola de reproducción continua.</p>
+  </div>
+</header>
+<main>
+  <section>
+    <div class="stage">
+      <video id="v" controls playsinline preload="auto" poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9'%3E%3Crect width='16' height='9' fill='%23111'/%3E%3Cpath d='M7.1 3.2v2.6l2.3-1.3z' fill='%23fff' fill-opacity='.85'/%3E%3C/svg%3E"></video>
+      <div id="now">Elige un vídeo de la biblioteca</div>
+      <div id="sub"></div>
+      <div id="msg" role="status"></div>
+      <div class="ctl main3">
+        <button id="prev" title="Anterior (p)">Anterior</button>
+        <button id="play" class="main">Reproducir</button>
+        <button id="next" title="Siguiente (n)">Siguiente</button>
+      </div>
+    </div>
+    <div class="panel qp" style="margin-top:12px">
+      <div class="bar">
+        <b id="qn">Cola (0)</b>
+        <div class="qtools">
+          <button id="shuf" class="chip" aria-pressed="false">Aleatorio</button>
+          <button id="rep" class="chip" aria-pressed="true">Repetir cola</button>
+          <button id="qclr" class="chip danger">Vaciar cola</button>
+        </div>
+      </div>
+      <div class="sleep">
+        <label for="slp">Temporizador de reposo</label>
+        <select id="slp">
+          <option value="off">Desactivado</option>
+          <option value="15">Dentro de 15 minutos</option>
+          <option value="30">Dentro de 30 minutos</option>
+          <option value="45">Dentro de 45 minutos</option>
+          <option value="60">Dentro de 1 hora</option>
+          <option value="end">Cuando la cola finalice</option>
+        </select>
+        <span id="slpst" role="status"></span>
+      </div>
+      <ol id="q"></ol>
+    </div>
+    <div class="panel qp" id="nzpanel" style="margin-top:12px">
+      <div class="bar">
+        <b>Ruido blanco</b>
+        <button id="nzb" class="chip" aria-pressed="false">Activar</button>
+      </div>
+      <div class="vol">
+        <label for="vch">Volumen Chopin</label>
+        <input id="vch" type="range" min="0" max="100" step="1" value="100">
+        <output id="vchv" for="vch">100</output>
+      </div>
+      <div class="vol">
+        <label for="vnz">Volumen ruido blanco</label>
+        <input id="vnz" type="range" min="0" max="100" step="1" value="50">
+        <output id="vnzv" for="vnz">50</output>
+      </div>
+      <div class="vol chk">
+        <label><input id="nzslp" type="checkbox"> El temporizador de reposo también apaga el ruido</label>
+      </div>
+      <div class="vol">
+        <label for="nzt">Tipo de ruido</label>
+        <select id="nzt">
+          <option value="white">Blanco</option>
+          <option value="pink">Rosa</option>
+          <option value="brown">Marrón</option>
+        </select>
+      </div>
+      <audio id="nza" loop playsinline preload="auto"></audio>
+      <p id="nzmsg" role="status"></p>
+    </div>
+  </section>
+  <aside>
+    <div class="panel">
+      <div class="bar"><b id="cnt">0 vídeos</b><button id="all" class="main chip">Reproducir lo mostrado</button></div>
+      <div class="tools">
+        <input id="q2" type="search" placeholder="Buscar intérprete u obra" aria-label="Buscar">
+        <select id="fed" aria-label="Edición"></select>
+        <select id="fst" aria-label="Etapa"></select>
+      </div>
+      <div class="tools">
+        <button id="exp" class="chip">Exportar</button>
+        <button id="impb" class="chip">Importar archivo</button>
+        <input id="imp" type="file" accept=".json,.txt" hidden>
+        <button id="cptxt" class="chip">Copiar como texto</button>
+        <button id="clr" class="chip danger">Vaciar biblioteca</button>
+      </div>
+      <div id="lib"></div>
+    </div>
+    <div class="panel">
+      <details class="d" id="add">
+        <summary>Añadir vídeos</summary>
+        <div class="dbody">
+          <p class="hint">Pega el resultado del código de la consola (una línea por vídeo). Los que ya estén se actualizan, no se duplican.</p>
+          <textarea id="ta" placeholder="Eric Lu | Piano Concerto in F minor, Op. 21 | Concert of laureates | 19th International Fryderyk Chopin Piano Competition | https://..."></textarea>
+          <div class="ctl" style="margin-top:0">
+            <input id="def" placeholder="Intérprete si falta" aria-label="Intérprete por defecto" style="flex:1 1 160px">
+            <button id="addb" class="main">Añadir a la biblioteca</button>
+          </div>
+        </div>
+      </details>
+      <details class="d" id="code">
+        <summary>Código para la consola</summary>
+        <div class="dbody">
+          <div class="codebar">
+            <button id="cpy" class="main">Copiar código</button>
+            <span id="cpyst" role="status"></span>
+          </div>
+          <ol class="steps">
+            <li>Abre una página de vídeos del Concurso y silencia la pestaña.</li>
+            <li>Pulsa F12, entra en «Consola», pega el código y espera.</li>
+            <li>Al terminar escribe <code>copy(__lu)</code> y pégalo en «Añadir vídeos». Repite en cada página.</li>
+            <li>Para parar: <code>__stop=true</code></li>
+          </ol>
+          <pre id="snip" tabindex="0" aria-label="Código para la consola"></pre>
+        </div>
+      </details>
+      <details class="d" id="inst">
+        <summary>Instalar como app</summary>
+        <div class="dbody">
+          <div class="codebar">
+            <button id="instb" class="main" hidden>Instalar</button>
+            <span id="instmsg" role="status"></span>
+          </div>
+          <ul class="steps" id="instst"></ul>
+          <p class="hint" style="margin:10px 0 0">Android: menú de Chrome (⋮) → «Instalar aplicación». iPhone: Safari → Compartir → «Añadir a pantalla de inicio».</p>
+        </div>
+      </details>
+    </div>
+  </aside>
+</main>
+<script>
+const SNIP=String.raw`(async()=>{
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+window.__stop=false;
+let found=[];
+
+if(window.__obs)window.__obs.disconnect();
+window.__obs=new PerformanceObserver(list=>{
+  list.getEntries().forEach(e=>{
+    if(/\.m3u8(\?|$)/.test(e.name))found.push(e.name);
+  });
+});
+window.__obs.observe({type:'resource'});
+
+const rows=()=>[...document.querySelectorAll('img[alt="Media thumbnail"]')]
+  .map(img=>img.closest('div.grid'))
+  .filter(Boolean);
+
+const info=r=>{
+  const p=[...r.querySelectorAll('p')].map(x=>x.textContent.trim()).filter(Boolean);
+  return{title:p[0]||'',perf:p[1]||'Sin intérprete',stage:p[2]||'',edition:p[3]||''};
+};
+const sig=o=>[o.title,o.perf,o.stage,o.edition].join('||');
+
+const nav=()=>document.querySelector('[aria-label="Pagination"]');
+const getPage=()=>{
+  const n=nav();
+  const b=n&&n.querySelector('button[aria-current="page"]');
+  return b?(parseInt(b.textContent,10)||1):1;
+};
+
+// Vuelve a la página indicada (la web salta a la 1 al abrir un vídeo)
+const goPage=async N=>{
+  for(let t=0;t<40&&!window.__stop;t++){
+    const c=getPage();
+    if(c===N)return true;
+    const n=nav();
+    if(!n)return false;
+    let b=n.querySelector('button[aria-label="Page '+N+'"]');
+    if(!b||b.disabled)
+      b=n.querySelector('button[aria-label="'+(c<N?'Next page':'Previous page')+'"]');
+    if(!b||b.disabled)return false;
+    b.click();
+    await sleep(1500);
+  }
+  return getPage()===N;
+};
+
+// Se apuntan TODAS las filas de esta página antes de hacer clic en ninguna
+const page=getPage();
+const list=rows().map(info);
+const cnt={};
+list.forEach(o=>{const s=sig(o);cnt[s]=(cnt[s]||0)+1;o.nth=cnt[s];});
+
+const n=list.length;
+const seen=new Set();
+const res=[];
+
+console.log('Página '+page+': '+n+' vídeos. Para parar: __stop=true');
+
+for(let i=0;i<n&&!window.__stop;i++){
+
+  const it=list[i];
+
+  if(getPage()!==page){
+    if(!(await goPage(page))){
+      console.warn('No pude volver a la página '+page+'. Me detengo.');
+      break;
+    }
+    await sleep(800);
+  }
+
+  // La fila se busca por su texto, no por su posición
+  const r=rows().filter(x=>sig(info(x))===sig(it))[it.nth-1];
+  if(!r){
+    console.warn('No encuentro la fila:',i+1,it.perf,it.title);
+    continue;
+  }
+
+  found=[];
+  const b=r.querySelector('button');
+  if(b)b.click();
+
+  await sleep(5000);
+
+  document.querySelectorAll('video').forEach(v=>v.pause());
+
+  const valid=[...new Set(found.filter(x=>x.includes('.m3u8')))];
+
+  if(!valid.length){
+    console.warn('Sin enlace:',i+1,it.perf);
+    continue;
+  }
+
+  const u=new URL(valid[valid.length-1]);
+
+  if(seen.has(u.href)){
+    console.warn('Repetido:',it.perf,it.title);
+    continue;
+  }
+  seen.add(u.href);
+
+  res.push([it.perf,it.title,it.stage,it.edition,u.href].join(' | '));
+
+  console.log((i+1)+'/'+n,it.title,'-',it.perf);
+
+  await sleep(1500);
+}
+
+window.__lu=res.join('\n');
+
+console.log('Terminado:',res.length,'enlaces');
+console.log('Escribe copy(__lu)');
+
+})();`;
+
+
+const $=s=>document.querySelector(s),V=$('#v'),KEY='chopin-biblioteca-v1',NOP='Sin intérprete';
+let lib={},queue=[],cur=-1,shuffle=false,repeat=true,hls=null,fails=0,open=new Set(),F={q:'',ed:'',st:''};
+
+const APP=!!window.AndroidBridge; // true solo dentro de la app Android
+const save=()=>{const s=JSON.stringify({lib,queue,cur,shuffle,repeat});try{localStorage.setItem(KEY,s)}catch(e){}try{if(APP)AndroidBridge.sync(s)}catch(e){}};
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){lib=d.lib||{};queue=(d.queue||[]).filter(k=>lib[k]);cur=Math.min(d.cur??-1,queue.length-1);shuffle=!!d.shuffle;repeat=d.repeat!==false}}catch(e){}}
+function msg(t,err){const m=$('#msg');m.textContent=t||'';m.className=err?'err':''}
+const mins=v=>v.s&&v.e?Math.round((v.e-v.s)/60000):0;
+
+// Posición de reproducción: pista y segundo, en una clave aparte y minúscula
+const KEY3='chopin-posicion-v1';let lastPos=0,restoring=false,seekH=null;
+function savePos(t){
+  try{
+    const k=queue[cur];if(!k)return;
+    if(t===undefined){if(V.readyState<1)return;t=V.currentTime}
+    localStorage.setItem(KEY3,JSON.stringify({k,t:Math.floor(t)}));
+  }catch(e){}
+}
+
+function keyOf(url){try{const u=new URL(url);return u.pathname+'|'+u.searchParams.get('startTime')+'|'+u.searchParams.get('stopTime')}catch(e){return String(url)}}
+function mk(url,perf,title,stage,edition){let s=0,e=0;try{const u=new URL(url);s=+u.searchParams.get('startTime')||0;e=+u.searchParams.get('stopTime')||0}catch(x){}
+  return{k:keyOf(url),url,perf:perf||NOP,title:title||'Vídeo',stage:stage||'',edition:edition||'',s,e}}
+
+
+function parse(text,def){
+
+  const out=[];
+
+  text.replace(/\\n/g,'\n').split(/\r?\n/).forEach(line=>{
+
+    const cleanLine =
+      line.replace(/<[^>]+>/g,'').replace(/^[\s'"`]+|[\s'"`]+$/g,'');
+
+    const m =
+      cleanLine.match(
+        /https?:\/\/[^\s"'|\\]+/
+      );
+
+    if(!m) return;
+
+    const f =
+      cleanLine
+      .slice(0,m.index)
+      .split('|')
+      .map(x=>x.trim())
+      .filter(Boolean);
+
+    let perf=def;
+    let title='';
+    let stage='';
+    let ed='';
+
+    if(f.length>=2){
+      // El orden de los campos puede variar (intérprete | título | … o título | intérprete | …): se reconoce cada uno por su contenido
+      const known=new Set(Object.values(lib).map(v=>v.perf));
+      const isEd=x=>/competition|konkurs|edition|concurso/i.test(x);
+      const isSt=x=>/^(stage\b|final\b|round\b|etap\b|preliminar|concert of laureates|laureates)/i.test(x);
+      const isTi=x=>/\d|\b(op|no|opus)\b\.?|etude|étude|nocturne|mazurka|waltz|polonaise|impromptu|ballade|prelude|rondo|barcarolle|tarantella|fantasy|fantasie|berceuse|bolero|variations|sonata|scherzo|concerto|koncert|andante|march/i.test(x);
+      const ti=[],un=[];
+      f.forEach(x=>{
+        if(isEd(x)){if(!ed)ed=x}
+        else if(isSt(x)){if(!stage)stage=x}
+        else if(isTi(x))ti.push(x);
+        else un.push(x);
+      });
+      if(!ti.length&&un.length>=2)ti.push(un.splice(1,1)[0]); // sin pistas en el título: se respeta el orden clásico intérprete | título
+      const pi=un.findIndex(x=>known.has(x)||x===def);
+      const pf=un.splice(pi>=0?pi:0,1)[0];
+      if(pf)perf=pf;
+      title=ti.join(' · ');
+      if(un.length)title+=(title?' ':'')+'('+un.join(', ')+')'; // p. ej. el director de orquesta
+    }
+    else if(f.length){
+      title=f[0];
+    }
+
+    out.push(
+      mk(
+        m[0],
+        perf,
+        title,
+        stage,
+        ed
+      )
+    );
+
+  });
+
+  return out;
+}
+
+
+
+
+function add(items){
+  let a=0,u=0;
+  items.forEach(it=>{
+    const o=lib[it.k];
+    if(o){o.url=it.url;if(it.perf!==NOP)o.perf=it.perf;if(it.title!=='Vídeo')o.title=it.title;o.stage=it.stage||o.stage;o.edition=it.edition||o.edition;u++}
+    else{lib[it.k]=it;a++}
+  });
+  save();render();
+  return `${a} nuevos, ${u} ya estaban (enlace actualizado).`;
+}
+function filt(){const q=F.q.toLowerCase();return Object.values(lib).filter(v=>(!F.ed||v.edition===F.ed)&&(!F.st||v.stage===F.st)&&(!q||(v.perf+' '+v.title+' '+v.stage).toLowerCase().includes(q)))}
+function groups(){
+  const g={};filt().forEach(v=>(g[v.perf]=g[v.perf]||[]).push(v));
+  Object.values(g).forEach(a=>a.sort((x,y)=>x.edition.localeCompare(y.edition)||x.s-y.s));
+  return Object.entries(g).sort((a,b)=>a[0].localeCompare(b[0]));
+}
+const btn=(txt,title,fn)=>{const b=document.createElement('button');b.className='s';b.textContent=txt;b.title=title;b.setAttribute('aria-label',title);b.onclick=e=>{e.stopPropagation();fn()};return b};
+function fill(sel,vals,curv,all){sel.textContent='';[''].concat(vals).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v||all;sel.append(o)});sel.value=vals.includes(curv)?curv:''}
+
+function render(){
+  const all=Object.values(lib);
+  fill($('#fed'),[...new Set(all.map(v=>v.edition).filter(Boolean))].sort(),F.ed,'Todas las ediciones');
+  fill($('#fst'),[...new Set(all.map(v=>v.stage).filter(Boolean))].sort(),F.st,'Todas las etapas');
+  $('#cnt').textContent=`${all.length} vídeos · ${new Set(all.map(v=>v.perf)).size} intérpretes`;
+  const L=$('#lib'),st=L.scrollTop;L.textContent='';
+  const gs=groups();
+  if(!gs.length){const d=document.createElement('div');d.className='empty';d.textContent=all.length?'Ningún vídeo coincide con el filtro.':'La biblioteca está vacía. Añade vídeos abajo.';L.append(d)}
+  gs.forEach(([name,arr])=>{
+    const d=document.createElement('details');d.className='g';d.open=open.has(name)||gs.length===1;
+    d.addEventListener('toggle',()=>{d.open?open.add(name):open.delete(name)});
+    const sm=document.createElement('summary');sm.textContent=`${name} (${arr.length})`;d.append(sm);
+    const tl=document.createElement('div');tl.className='tools';
+    const pa=document.createElement('button');pa.className='main';pa.textContent='Reproducir todo';pa.onclick=()=>playKeys(arr.map(v=>v.k),0);
+    const ad=document.createElement('button');ad.textContent='Añadir a la cola';ad.onclick=()=>enqueue(arr.map(v=>v.k));
+    const rm=document.createElement('button');rm.textContent='Quitar intérprete';rm.onclick=()=>{if(confirm(`¿Quitar a ${name} y sus ${arr.length} vídeos de la biblioteca?`))arr.forEach(v=>removeItem(v.k,true))};
+    tl.append(pa,ad,rm);d.append(tl);
+    arr.forEach((v,i)=>{
+      const r=document.createElement('div');r.className='it'+(queue[cur]===v.k?' on':'');r.tabIndex=0;
+      const t=document.createElement('span');t.textContent=v.title;
+      const sb=document.createElement('small');sb.textContent=[v.stage,v.edition,mins(v)?mins(v)+' min':''].filter(Boolean).join(' · ');t.append(sb);
+      r.onclick=()=>playKeys(arr.map(x=>x.k),i);r.onkeydown=e=>{if(e.key==='Enter')r.click()};
+      r.append(t,btn('+','Añadir a la cola',()=>enqueue([v.k])),btn('×','Quitar de la biblioteca',()=>removeItem(v.k)));
+      d.append(r);
+    });
+    L.append(d);
+  });
+  L.scrollTop=st;
+  renderQ();
+}
+function renderQ(){
+  const q=$('#q');q.textContent='';$('#qn').textContent=`Cola (${queue.length})`;
+  queue.forEach((k,i)=>{const v=lib[k];if(!v)return;const li=document.createElement('li');if(i===cur)li.className='on';li.textContent=`${i+1}. ${v.perf} – ${v.title}`;li.onclick=()=>play(i);q.append(li)});
+  const on=q.querySelector('.on');if(on){const t=on.offsetTop,b=t+on.offsetHeight;if(t<q.scrollTop)q.scrollTop=t;else if(b>q.scrollTop+q.clientHeight)q.scrollTop=b-q.clientHeight}
+  const v=lib[queue[cur]];
+  $('#now').textContent=v?v.title:'Elige un vídeo de la biblioteca';
+  $('#sub').textContent=v?[v.perf,v.stage,v.edition].filter(Boolean).join(' · '):'';
+  $('#shuf').setAttribute('aria-pressed',shuffle);$('#rep').setAttribute('aria-pressed',repeat);
+}
+function removeItem(k,quiet){
+  const was=queue[cur];delete lib[k];
+  queue=queue.filter(x=>x!==k);cur=was===k?Math.min(cur,queue.length-1):queue.indexOf(was);
+  if(was===k)stop();
+  save();if(!quiet)render();else render();
+}
+function enqueue(keys){const n=keys.filter(k=>!queue.includes(k));queue.push(...n);save();renderQ();msg(`${n.length} añadidos a la cola.`)}
+function playKeys(keys,i){queue=keys.slice();cur=-1;play(i)}
+
+function stop(){if(APP)try{AndroidBridge.stop()}catch(e){}if(hls){hls.destroy();hls=null}V.removeAttribute('src');V.load()}
+function fail(why){if(restoring){restoring=false;msg(why+' Puede que el enlace haya caducado: vuelve a añadir los vídeos.',true);return}fails++;if(fails>=3){msg(why+' Tres fallos seguidos: me detengo.',true);return}msg(why+' Paso al siguiente.',true);setTimeout(next,1500)}
+function loadSrc(url,at,auto=true){
+  if(APP){if(auto)AndroidBridge.playIndex(cur);return}
+  stop();
+  if(seekH){V.removeEventListener('loadedmetadata',seekH);seekH=null}
+  if(at>0){
+    seekH=()=>{seekH=null;restoring=false;let t=at;if(V.duration&&t>V.duration-5)t=0;if(t>0)V.currentTime=t};
+    V.addEventListener('loadedmetadata',seekH,{once:true});
+  }
+  if(window.Hls&&Hls.isSupported()){
+    hls=new Hls(at>0?{startPosition:at}:{});
+    hls.on(Hls.Events.ERROR,(e,d)=>{
+      if(!d.fatal)return;
+      if(d.type===Hls.ErrorTypes.NETWORK_ERROR)fail('No se pudo descargar el vídeo (enlace caducado o no permitido).');
+      else if(d.type===Hls.ErrorTypes.MEDIA_ERROR)hls.recoverMediaError();
+      else fail('Error de reproducción.');
+    });
+    hls.loadSource(url);hls.attachMedia(V);
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{if(auto)V.play().catch(()=>{})});
+  }else{V.src=url;if(auto)V.play().catch(()=>{})}
+}
+function play(i){
+  if(!queue.length)return;
+  cur=((i%queue.length)+queue.length)%queue.length;
+  const v=lib[queue[cur]];if(!v)return next();
+  msg('');save();savePos(0);render();loadSrc(v.url);
+  setMeta(v);
+}
+function next(){
+  if(!queue.length)return;
+  if(shuffle&&queue.length>1){let j;do{j=Math.floor(Math.random()*queue.length)}while(j===cur);return play(j)}
+  if(cur+1>=queue.length){if(repeat)return play(0);msg('Fin de la cola.');return}
+  play(cur+1);
+}
+function prev(){if(!queue.length)return;if(V.currentTime>3){V.currentTime=0;return}play(cur<=0?queue.length-1:cur-1)}
+
+// Temporizador de reposo: 'off', 'time' (minutos) o 'end' (al terminar la cola)
+let sleepMode='off',sleepEnd=0,sleepTick=null,sleepPlayed=0,sleepVol=null;
+function sleepClear(){clearInterval(sleepTick);sleepTick=null;sleepEnd=0;if(sleepVol!==null){V.volume=sleepVol;sleepVol=null}}
+function sleepUi(){
+  const s=$('#slpst');
+  if(sleepMode==='off'){s.textContent='';return}
+  if(sleepMode==='end'){s.textContent='Se detendrá al terminar la cola.';return}
+  const r=Math.max(0,sleepEnd-Date.now()),m=Math.floor(r/60000),sec=Math.floor(r%60000/1000);
+  s.textContent='Se apagará en '+m+':'+String(sec).padStart(2,'0');
+}
+function sleepFire(why){
+  V.pause();if(APP)AndroidBridge.pause();sleepClear();sleepMode='off';$('#slp').value='off';sleepUi();msg(why);
+  if($('#nzslp').checked)nzStop();
+}
+function sleepCheck(){
+  const r=sleepEnd-Date.now();
+  if(r<=0)return sleepFire('Temporizador de reposo: reproducción detenida.');
+  if(r<=10000&&!V.paused){if(sleepVol===null)sleepVol=V.volume;V.volume=Math.max(0,sleepVol*r/10000)} // bajada suave de volumen en los últimos 10 s
+  sleepUi();
+}
+$('#slp').onchange=e=>{
+  const v=e.target.value;sleepClear();sleepPlayed=0;
+  sleepMode=v==='off'?'off':v==='end'?'end':'time';
+  if(sleepMode==='time'){sleepEnd=Date.now()+(+v)*60000;sleepTick=setInterval(sleepCheck,1000)}
+  sleepUi();
+};
+document.addEventListener('visibilitychange',()=>{if(sleepMode==='time')sleepCheck()});
+
+// Ruido generado en el propio móvil y reproducido en un <audio>: así sigue sonando con la pantalla bloqueada
+const NZ=$('#nza'),KEY2='chopin-ruido-v1';
+let nzOn=false,nzUrl=null,nzType='',vol={ch:100,nz:50,slp:false,type:'white'};
+try{Object.assign(vol,JSON.parse(localStorage.getItem(KEY2)||'{}'))}catch(e){}
+const saveVol=()=>{try{localStorage.setItem(KEY2,JSON.stringify(vol))}catch(e){}};
+function nzMsg(t,err){const m=$('#nzmsg');m.textContent=t||'';m.className=err?'err':''}
+function showVol(){
+  $('#vch').value=vol.ch;$('#vchv').textContent=vol.ch;
+  $('#vnz').value=vol.nz;$('#vnzv').textContent=vol.nz;
+  $('#nzslp').checked=!!vol.slp;$('#nzt').value=vol.type;
+}
+// Genera 30 s de ruido (mono, 44,1 kHz) que enlazan sin salto al repetirse
+function nzWav(type){
+  const sr=44100,N=sr*30,M=sr,x=new Float32Array(N+M);
+  if(type==='pink'){
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for(let i=0;i<x.length;i++){const w=Math.random()*2-1;
+      b0=.99886*b0+w*.0555179;b1=.99332*b1+w*.0750759;b2=.969*b2+w*.153852;b3=.8665*b3+w*.3104856;b4=.55*b4+w*.5329522;b5=-.7616*b5-w*.016898;
+      x[i]=b0+b1+b2+b3+b4+b5+b6+w*.5362;b6=w*.115926}
+  }else if(type==='brown'){
+    let l=0;for(let i=0;i<x.length;i++){const w=Math.random()*2-1;l=(l+.02*w)/1.02;x[i]=l}
+  }else{for(let i=0;i<x.length;i++)x[i]=Math.random()*2-1}
+  const o=new Float32Array(N);let pk=1e-9;
+  for(let i=0;i<N;i++){
+    o[i]=i<M?x[i]*Math.sin(i/M*Math.PI/2)+x[N+i]*Math.cos(i/M*Math.PI/2):x[i];
+    if(Math.abs(o[i])>pk)pk=Math.abs(o[i]);
+  }
+  const g=0.9/pk,buf=new ArrayBuffer(44+N*2),dv=new DataView(buf);
+  const ws=(off,t)=>{for(let i=0;i<t.length;i++)dv.setUint8(off+i,t.charCodeAt(i))};
+  ws(0,'RIFF');dv.setUint32(4,36+N*2,true);ws(8,'WAVE');ws(12,'fmt ');dv.setUint32(16,16,true);
+  dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,sr,true);dv.setUint32(28,sr*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);
+  ws(36,'data');dv.setUint32(40,N*2,true);
+  for(let i=0;i<N;i++)dv.setInt16(44+i*2,Math.max(-1,Math.min(1,o[i]*g))*32767,true);
+  return new Blob([buf],{type:'audio/wav'});
+}
+function nzLoad(){
+  if(nzType===vol.type&&nzUrl)return;
+  if(nzUrl)URL.revokeObjectURL(nzUrl);
+  nzUrl=URL.createObjectURL(nzWav(vol.type));nzType=vol.type;NZ.src=nzUrl;NZ2.src=nzUrl;
+}
+// Para evitar el corte del bucle se usan dos reproductores que se solapan: cuando el actual está a punto de acabar,
+// entra el otro con un fundido cruzado de 4 s. Si el sistema no deja cambiar el volumen (iPhone), se usa el bucle normal.
+const NZ2=new Audio();NZ2.preload='auto';NZ2.setAttribute('playsinline','');
+const NZE=[NZ,NZ2],OV=4;let nzAct=0,nzFade=0,nzG=[1,0],nzT=null;
+const canVol=(()=>{const t=new Audio();t.volume=.5;return t.volume===.5})();
+function nzApplyVol(){NZE.forEach((e,i)=>{e.volume=Math.max(0,Math.min(1,vol.nz/100*nzG[i]))})}
+function nzSwapDone(){const a=NZE[nzAct];a.pause();try{a.currentTime=0}catch(e){}nzAct=1-nzAct;nzG[nzAct]=1;nzG[1-nzAct]=0;nzFade=0;nzApplyVol()}
+function nzTick(){
+  const a=NZE[nzAct],b=NZE[1-nzAct];
+  if(!nzFade){
+    if(a.paused)return;
+    const d=a.duration;
+    if(!(d&&isFinite(d)&&d-a.currentTime<=OV+1))return;
+    nzFade=performance.now();try{b.currentTime=0}catch(e){}b.play().catch(()=>{});
+  }
+  const p=Math.min(1,(performance.now()-nzFade)/(OV*1000));
+  nzG[nzAct]=Math.cos(p*Math.PI/2);nzG[1-nzAct]=Math.sin(p*Math.PI/2);nzApplyVol();
+  if(p>=1)nzSwapDone();
+}
+function nzLoop(){nzTick();nzT=nzOn?setTimeout(nzLoop,nzFade?100:1000):null}
+NZE.forEach((e,i)=>e.addEventListener('ended',()=>{
+  if(!canVol||!nzOn||i!==nzAct)return;
+  if(nzFade)return nzSwapDone();
+  const b=NZE[1-nzAct];nzG[nzAct]=0;nzG[1-nzAct]=1;nzAct=1-nzAct;nzApplyVol();try{b.currentTime=0}catch(x){}b.play().catch(()=>{});
+}));
+function nzPauseAll(){NZE.forEach(e=>e.pause());nzFade=0;nzG[nzAct]=1;nzG[1-nzAct]=0;nzApplyVol();try{NZE[1-nzAct].currentTime=0}catch(e){}}
+function nzPlay(){
+  nzFade=0;nzAct=0;nzG=[1,0];NZ.loop=!canVol;NZ2.loop=false;
+  try{NZ2.pause();NZ2.currentTime=0}catch(e){}
+  nzApplyVol();
+  NZ.play().catch(()=>nzMsg('No se pudo iniciar el ruido. Vuelve a pulsar «Activar».',true));
+  clearTimeout(nzT);if(canVol)nzT=setTimeout(nzLoop,1000);
+}
+$('#vch').oninput=e=>{vol.ch=+e.target.value;$('#vchv').textContent=vol.ch;if(sleepVol===null)V.volume=vol.ch/100;saveVol()};
+$('#vnz').oninput=e=>{vol.nz=+e.target.value;$('#vnzv').textContent=vol.nz;nzApplyVol();saveVol()};
+$('#nzslp').onchange=e=>{vol.slp=e.target.checked;saveVol()};
+$('#nzt').onchange=e=>{vol.type=e.target.value;saveVol();if(nzOn){nzLoad();nzPlay()}};
+// Si se cambia el volumen con los controles del propio vídeo, el deslizador lo sigue (salvo durante la bajada del temporizador)
+V.addEventListener('volumechange',()=>{
+  if(sleepVol!==null)return;
+  const n=Math.round(V.volume*100);
+  if(n!==vol.ch){vol.ch=n;$('#vch').value=n;$('#vchv').textContent=n;saveVol()}
+});
+function nzUi(){const b=$('#nzb');b.setAttribute('aria-pressed',nzOn);b.textContent=nzOn?'Desactivar':'Activar'}
+function nzStart(){nzOn=true;nzUi();nzMsg('');nzLoad();nzPlay();metaNoise()}
+function nzStop(){nzOn=false;nzUi();clearTimeout(nzT);nzPauseAll()}
+$('#nzb').onclick=()=>nzOn?nzStop():nzStart();
+// --- Integración con el coche (Bluetooth/USB), auriculares y pantalla de bloqueo: Media Session ---
+// Un solo reproductor para el sistema: sus botones controlan Chopin y el ruido a la vez.
+const MS='mediaSession' in navigator;
+const ART=[{src:'icon-512.png',sizes:'512x512',type:'image/png'},{src:'icon-192.png',sizes:'192x192',type:'image/png'}];
+function setMeta(v){
+  if(!MS)return;
+  try{navigator.mediaSession.metadata=new MediaMetadata({
+    title:v.title,artist:v.perf,
+    album:[v.stage,v.edition].filter(Boolean).join(' · ')||'Biblioteca del Concurso Chopin',
+    artwork:ART})}catch(e){}
+}
+function metaNoise(){ // solo ruido, sin pista cargada
+  if(!MS||V.currentSrc)return;
+  try{navigator.mediaSession.metadata=new MediaMetadata({
+    title:'Ruido '+({white:'blanco',pink:'rosa',brown:'marrón'}[vol.type]||'blanco'),
+    artist:'Biblioteca del Concurso Chopin',artwork:ART})}catch(e){}
+}
+function msState(){ // «reproduciendo» si suena Chopin o el ruido
+  if(!MS)return;
+  const on=!V.paused||(nzOn&&!NZE[nzAct].paused);
+  navigator.mediaSession.playbackState=on?'playing':'paused';
+}
+function msPos(){ // barra de progreso en el coche y en la pantalla de bloqueo
+  if(!MS||!navigator.mediaSession.setPositionState)return;
+  try{
+    const d=V.duration;
+    if(!d||!isFinite(d)){navigator.mediaSession.setPositionState();return}
+    navigator.mediaSession.setPositionState({duration:d,playbackRate:V.playbackRate||1,position:Math.min(d,Math.max(0,V.currentTime))});
+  }catch(e){}
+}
+['loadedmetadata','durationchange','seeked','playing','pause','ratechange'].forEach(ev=>V.addEventListener(ev,msPos));
+['playing','pause','emptied'].forEach(ev=>V.addEventListener(ev,msState));
+NZE.forEach(e=>['play','pause'].forEach(ev=>e.addEventListener(ev,msState)));
+if(MS){
+  const set=(a,f)=>{try{navigator.mediaSession.setActionHandler(a,f)}catch(e){}};
+  const resume=()=>{ // muchos coches mandan «play» al conectarse: retoma donde lo dejaste
+    if(!V.currentSrc){if(queue.length)play(cur>=0?cur:0)}else V.play().catch(()=>{});
+    if(nzOn)NZE[nzAct].play().catch(()=>{});
+  };
+  const halt=()=>{V.pause();nzPauseAll()};
+  const jump=d=>{if(V.duration&&isFinite(V.duration)){V.currentTime=Math.max(0,Math.min(V.duration,V.currentTime+d));msPos()}};
+  set('play',resume);set('pause',halt);set('stop',halt);
+  set('previoustrack',prev);set('nexttrack',next);
+  set('seekbackward',e=>jump(-((e&&e.seekOffset)||10)));
+  set('seekforward',e=>jump((e&&e.seekOffset)||10));
+  set('seekto',e=>{if(e.seekTime==null)return;if(e.fastSeek&&V.fastSeek)V.fastSeek(e.seekTime);else V.currentTime=e.seekTime;msPos()});
+}
+showVol();V.volume=vol.ch/100;nzUi();
+
+V.addEventListener('ended',()=>{
+  fails=0;
+  if(sleepMode==='end'){
+    sleepPlayed++;
+    // Sin aleatorio: al acabar el último de la cola. Con aleatorio: tras reproducir tantos vídeos como hay en la cola.
+    if(shuffle?sleepPlayed>=queue.length:cur>=queue.length-1)return sleepFire('Fin de la cola: reproducción detenida.');
+  }
+  next();
+});
+V.addEventListener('timeupdate',()=>{const n=Date.now();if(n-lastPos>5000){lastPos=n;savePos()}}); // como mucho una escritura cada 5 s
+V.addEventListener('pause',()=>savePos());
+document.addEventListener('visibilitychange',()=>{if(document.hidden)savePos()});
+addEventListener('pagehide',()=>savePos());
+V.addEventListener('playing',()=>{fails=0;$('#play').textContent='Pausa'});
+V.addEventListener('pause',()=>{$('#play').textContent='Reproducir'});
+V.addEventListener('error',()=>{if(V.src&&!hls)fail('No se pudo reproducir el vídeo.')});
+$('#play').onclick=()=>{if(!queue.length)return $('#all').click();if(cur<0)return play(0);if(APP)return AndroidBridge.toggle();V.paused?V.play():V.pause()};
+$('#next').onclick=next;$('#prev').onclick=prev;
+$('#shuf').onclick=()=>{shuffle=!shuffle;save();renderQ()};
+$('#rep').onclick=()=>{repeat=!repeat;save();renderQ()};
+$('#qclr').onclick=()=>{queue=[];cur=-1;stop();save();render()};
+$('#all').onclick=()=>{const ks=groups().flatMap(([n,a])=>a.map(v=>v.k));if(!ks.length)return msg('No hay vídeos que reproducir.',true);playKeys(ks,0)};
+$('#q2').oninput=e=>{F.q=e.target.value;render()};
+$('#fed').onchange=e=>{F.ed=e.target.value;render()};
+$('#fst').onchange=e=>{F.st=e.target.value;render()};
+$('#addb').onclick=()=>{const it=parse($('#ta').value,$('#def').value.trim()||NOP);if(!it.length)return msg('No he encontrado ninguna URL en ese texto.',true);msg(add(it));$('#ta').value=''};
+$('#exp').onclick=()=>{
+  const b=new Blob([JSON.stringify({version:1,exportado:new Date().toISOString(),items:Object.values(lib)},null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='biblioteca-chopin-'+new Date().toISOString().slice(0,10)+'.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);msg(`Exportados ${Object.keys(lib).length} vídeos.`);
+};
+$('#impb').onclick=()=>$('#imp').click();
+$('#imp').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;const t=await f.text();let items;
+  try{const d=JSON.parse(t);items=(d.items||d).filter(i=>i&&i.url).map(i=>mk(i.url,i.perf,i.title,i.stage,i.edition))}
+  catch(x){items=parse(t,$('#def').value.trim()||NOP)}
+  msg(items.length?add(items):'El archivo no contiene vídeos.',!items.length);e.target.value='';
+};
+$('#cptxt').onclick=()=>{
+  const t=Object.values(lib).sort((a,b)=>a.perf.localeCompare(b.perf)||a.edition.localeCompare(b.edition)||a.s-b.s).map(v=>[v.perf,v.title,v.stage,v.edition,v.url].join(' | ')).join('\n');
+  navigator.clipboard.writeText(t).then(()=>msg('Lista copiada como texto.'),()=>msg('No se pudo copiar.',true));
+};
+$('#clr').onclick=()=>{if(!Object.keys(lib).length||!confirm('¿Vaciar toda la biblioteca? Exporta antes si quieres conservarla.'))return;lib={};queue=[];cur=-1;stop();save();render()};
+$('#snip').textContent=SNIP;
+
+const cpy=$('#cpy'),cpyst=$('#cpyst');let cpyT;
+cpy.onclick=async()=>{
+  let ok=false;
+  try{await navigator.clipboard.writeText(SNIP);ok=true}catch(e){}
+  if(!ok){
+    try{
+      const ta=document.createElement('textarea');
+      ta.value=SNIP;ta.setAttribute('readonly','');
+      ta.style.cssText='position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta);ta.select();
+      ok=document.execCommand('copy');ta.remove();
+    }catch(e){}
+  }
+  if(!ok){const r=document.createRange();r.selectNodeContents($('#snip'));const g=getSelection();g.removeAllRanges();g.addRange(r)}
+  cpy.textContent=ok?'Copiado \u2713':'No se pudo copiar';
+  cpyst.textContent=ok?'Listo: pégalo en la consola (F12).':'Texto seleccionado: cópialo a mano.';
+  clearTimeout(cpyT);
+  cpyT=setTimeout(()=>{cpy.textContent='Copiar código';cpyst.textContent=''},2500);
+};
+
+// Al abrir un menú, se deja a la vista entero (sin quedar bajo el reproductor fijo en móvil)
+['#add','#code','#inst'].forEach(id=>{
+  const d=$(id);
+  d.addEventListener('toggle',()=>{
+    if(!d.open)return;
+    requestAnimationFrame(()=>{
+      const st=document.querySelector('.stage');
+      const mob=matchMedia('(max-width:900px)').matches;
+      const topLimit=(mob&&st?st.getBoundingClientRect().bottom:0)+8;
+      const r=d.getBoundingClientRect();
+      let dy=0;
+      if(r.top<topLimit)dy=r.top-topLimit;
+      else if(r.bottom>innerHeight-8)dy=Math.min(r.bottom-innerHeight+8,r.top-topLimit);
+      if(Math.abs(dy)>1)scrollBy({top:dy,behavior:'smooth'});
+    });
+  });
+});
+
+document.addEventListener('keydown',e=>{
+  if(/^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.key==='n')next();else if(e.key==='p')prev();
+});
+function restorePos(){
+  try{
+    const d=JSON.parse(localStorage.getItem(KEY3)||'null'),k=queue[cur];
+    if(!d||cur<0||!k||d.k!==k||!lib[k])return;
+    const v=lib[k],t=Math.max(0,d.t|0);
+    restoring=true;loadSrc(v.url,t,false);
+    setMeta(v);
+    msg(t>0?'Retomado en '+Math.floor(t/60)+':'+String(t%60).padStart(2,'0')+'. Pulsa Reproducir para continuar.':'Pista recuperada. Pulsa Reproducir.');
+  }catch(e){}
+}
+window.__nativeState=(c,p)=>{if(c>=0&&c<queue.length&&c!==cur){cur=c;save();render()}$('#play').textContent=p?'Pausa':'Reproducir'};
+load();if(APP)save();render();if(Object.keys(lib).length)$('#add').open=false;
+restorePos();
+
+// Modo aplicación (solo con https o localhost; con file:// no se registra)
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(e=>{window.__swErr=String((e&&e.message)||e).slice(0,90)}));
+}
+
+// Instalación: botón propio y diagnóstico de qué falta
+let dip=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();dip=e;showInst()});
+addEventListener('appinstalled',()=>{dip=null;$('#instmsg').textContent='Instalada.';showInst()});
+async function showInst(){
+  const rows=[],row=(t,ok)=>rows.push((ok===undefined?'\u2022 ':ok?'\u2713 ':'\u2717 ')+t);
+  row('Conexión segura (https)',isSecureContext);
+  let reg=null;try{reg=await navigator.serviceWorker.getRegistration()}catch(e){}
+  row('Service worker '+(reg?(reg.active?'activo':'instalándose'):'no registrado'+(window.__swErr?' ('+window.__swErr+')':'')),!!(reg&&reg.active));
+  const lk=document.querySelector('link[rel=manifest]');let mt='la página no enlaza ningún manifest',mok=false;
+  if(lk){try{const r=await fetch(lk.href,{cache:'no-store'});if(r.ok){const j=await r.json();mok=true;mt='manifest correcto (id: '+(j.id||'sin id')+')'}else mt='manifest no encontrado (error '+r.status+')'}catch(e){mt='manifest ilegible'}}
+  row(mt,mok);
+  const app=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+  row('La estás abriendo '+(app?'como app instalada':'en el navegador'));
+  row('El navegador ofrece instalarla'+(dip?'':' (si no, usa su menú)'),!!dip);
+  const ul=$('#instst');ul.textContent='';rows.forEach(t=>{const li=document.createElement('li');li.textContent=t;ul.append(li)});
+  $('#instb').hidden=!dip;
+}
+$('#instb').onclick=async()=>{
+  if(!dip)return;dip.prompt();
+  let r;try{r=await dip.userChoice}catch(e){}
+  $('#instmsg').textContent=r&&r.outcome==='accepted'?'Instalando…':'Instalación cancelada.';
+  dip=null;showInst();
+};
+$('#inst').addEventListener('toggle',()=>{if($('#inst').open)showInst()});
+</script>
+</body>
+</html>
