@@ -40,7 +40,7 @@ object Caratulas {
     }
 
     private fun persistir(ctx: Context) {
-        runCatching { File(ctx.filesDir, ARCHIVO).writeText(JSONObject(mapa).toString()) }
+        runCatching { File(ctx.filesDir, ARCHIVO).writeText(JSONObject(mapa as Map<*, *>).toString()) }
     }
 
     private fun idDe(perf: String): String =
