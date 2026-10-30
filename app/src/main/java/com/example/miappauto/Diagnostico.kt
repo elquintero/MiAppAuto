@@ -109,6 +109,14 @@ object Diagnostico {
             sb.append("media $media ms, máx ${a.msMax} ms, ~$kbps kbps efectivos\n")
             if (a.formato.isNotEmpty()) sb.append("     formato: ${a.formato}\n")
         }
+        val conVideo = acumulado.any { it.key.contains("segmentos") && it.key.contains("vídeo") && it.value.cargas > 0 }
+        val conMixto = acumulado.any { it.key.contains("segmentos") && it.key.contains("mixto") && it.value.cargas > 0 }
+        val soloAudio = acumulado.any { it.key.contains("segmentos") && it.key.contains("audio") && it.value.cargas > 0 }
+        sb.append("RESUMEN:\n")
+        if (conVideo) sb.append(" - hay descargas de VÍDEO aparte del audio\n")
+        if (conMixto) sb.append(" - hay trozos con audio y vídeo juntos (no se pueden separar)\n")
+        if (soloAudio) sb.append(" - hay descargas de SOLO AUDIO\n")
+        if (!conVideo && !conMixto && !soloAudio) sb.append(" - todavía no hay descargas que analizar\n")
         sb.append("Errores de carga: $errores")
         if (ultimoError.isNotEmpty()) sb.append(" (último: $ultimoError)")
         sb.append("\n\nEventos recientes:\n")
@@ -116,24 +124,47 @@ object Diagnostico {
         return sb.toString()
     }
 
-    /** Descarga la lista principal y comprueba qué calidades y listas maestras existen. Fuera del hilo principal. */
+    /** Descarga la lista principal, detecta si hay audio independiente y comprueba calidades. Fuera del hilo principal. */
     fun listas(url: String?): String {
         if (url == null) return "(no hay ningún vídeo en la biblioteca para probar)"
         val sb = StringBuilder()
         val principal = bajar(url)
-        sb.append("== LISTA PRINCIPAL (${principal.second} ms) ==\n$url\n\n")
-        sb.append(principal.first.take(700)).append("\n...\n")
+        val texto = principal.first
+        val esMaestra = texto.contains("#EXT-X-STREAM-INF") || texto.contains("#EXT-X-MEDIA")
+        sb.append("== LISTA PRINCIPAL (${principal.second} ms) ==\n$url\n")
+        sb.append(if (esMaestra) "Tipo: LISTA MAESTRA (varias calidades)\n\n" else "Tipo: lista de una sola calidad\n\n")
+        if (esMaestra) {
+            sb.append(texto.take(4500))
+        } else {
+            sb.append(texto.take(600)).append("\n...\n").append(texto.takeLast(200))
+        }
+        sb.append("\n")
 
-        sb.append("\n== ¿QUÉ CALIDADES EXISTEN? ==\n")
-        for (n in Calidad.niveles) {
-            val u = Calidad.con(url, n) ?: break
-            sb.append("$n: ${sondear(u)}\n")
+        if (esMaestra) {
+            val audios = texto.lines()
+                .filter { it.startsWith("#EXT-X-MEDIA") && it.contains("TYPE=AUDIO") }
+                .mapNotNull { Regex("URI=\"([^\"]+)\"").find(it)?.groupValues?.get(1) }
+            sb.append("\n== AUDIO INDEPENDIENTE: ")
+            sb.append(if (audios.isEmpty()) "NO HAY ==\n" else "SÍ (${audios.size} pistas) ==\n")
+            for (a in audios.take(2)) {
+                val abs = runCatching { URL(URL(url), a).toString() }.getOrNull() ?: continue
+                val r = bajar(abs)
+                sb.append("\n$abs\n(${r.second} ms)\n")
+                sb.append(r.first.take(800)).append("\n...\n").append(r.first.takeLast(200)).append("\n")
+            }
         }
 
-        val base = url.substringBeforeLast('/') + "/"
-        sb.append("\n== ¿HAY LISTA MAESTRA? ==\n")
-        for (nombre in listOf("playlist.m3u8", "master.m3u8", "index.m3u8", "hls.m3u8", "main.m3u8", "audio.m3u8")) {
-            sb.append("$nombre: ${sondear(base + nombre)}\n")
+        if (Calidad.nivelDe(url) != null) {
+            sb.append("\n== ¿QUÉ CALIDADES EXISTEN? ==\n")
+            for (n in Calidad.niveles) {
+                val u = Calidad.con(url, n) ?: break
+                sb.append("$n: ${sondear(u)}\n")
+            }
+            val base = url.substringBeforeLast('/') + "/"
+            sb.append("\n== ¿HAY LISTA MAESTRA? ==\n")
+            for (nombre in listOf("playlist.m3u8", "master.m3u8", "index.m3u8", "hls.m3u8", "main.m3u8", "audio.m3u8")) {
+                sb.append("$nombre: ${sondear(base + nombre)}\n")
+            }
         }
         return sb.toString()
     }
@@ -179,7 +210,7 @@ object Diagnostico {
             c.connectTimeout = 15_000
             c.readTimeout = 20_000
             val texto = c.inputStream.use { s ->
-                val b = ByteArray(30_000)
+                val b = ByteArray(200_000)
                 var n = 0
                 while (n < b.size) {
                     val r = s.read(b, n, b.size - n)

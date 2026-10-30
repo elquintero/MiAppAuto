@@ -214,6 +214,7 @@ class MusicService : MediaLibraryService() {
         player.trackSelectionParameters = player.trackSelectionParameters
             .buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+            .setMaxVideoSize(320, 180)
             .build()
 
         player.shuffleModeEnabled = Biblioteca.shuffle
