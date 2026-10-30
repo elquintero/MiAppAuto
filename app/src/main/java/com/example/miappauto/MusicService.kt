@@ -1,11 +1,14 @@
 package com.example.miappauto
 
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -32,6 +35,8 @@ class MusicService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
     private var playlistEsCola = false
     private var fallos = 0
+    private var reintentosRed = 0
+    private val manejador = Handler(Looper.getMainLooper())
 
     private val callback = object : MediaLibrarySession.Callback {
 
@@ -218,12 +223,27 @@ class MusicService : MediaLibraryService() {
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Diagnostico.evento("estado: ${Diagnostico.nombreEstado(playbackState)}")
-                if (playbackState == Player.STATE_READY) fallos = 0
+                if (playbackState == Player.STATE_READY) {
+                    fallos = 0
+                    reintentosRed = 0
+                }
             }
 
             // Enlace caducado o caído: pasa al siguiente, y se detiene tras tres fallos seguidos
             override fun onPlayerError(error: PlaybackException) {
                 Diagnostico.evento("ERROR ${error.errorCodeName}: ${error.message}")
+                // 1) La calidad elegida no existe en el servidor (error 404): se prueba otra
+                if (codigoHttp(error) == 404 && subirCalidad(player)) return
+                // 2) Se perdió la conexión (túnel, cambio de antena...): se reintenta la MISMA pista
+                if (error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                ) {
+                    if (reintentosRed < 40) {
+                        reintentosRed++
+                        manejador.postDelayed({ player.prepare(); player.play() }, 3000)
+                        return
+                    }
+                }
                 fallos++
                 if (fallos < 3 && player.mediaItemCount > 1) {
                     player.seekToNextMediaItem()
@@ -263,6 +283,44 @@ class MusicService : MediaLibraryService() {
         })
 
         session = MediaLibrarySession.Builder(this, player, callback).build()
+    }
+
+    private fun codigoHttp(e: Throwable?): Int? {
+        var c = e
+        while (c != null) {
+            if (c is HttpDataSource.InvalidResponseCodeException) return c.responseCode
+            c = c.cause
+        }
+        return null
+    }
+
+    /** La calidad pedida no existe: se marca como inexistente y se reintenta con la siguiente. */
+    private fun subirCalidad(p: Player): Boolean {
+        val item = p.currentMediaItem ?: return false
+        val video = Biblioteca.lib[item.mediaId] ?: return false
+        val uri = item.localConfiguration?.uri?.toString() ?: return false
+        val fallida = Calidad.nivelDe(uri) ?: return false
+        Calidad.marcarInexistente(fallida)
+        val nueva = Calidad.aplicar(video.url)
+        if (nueva == uri) return false
+        Diagnostico.evento("la calidad $fallida no existe; se prueba otra")
+        p.replaceMediaItem(p.currentMediaItemIndex, Biblioteca.itemDe(video))
+        p.prepare()
+        p.play()
+        return true
+    }
+
+    /** Cambio de calidad: se reconstruye la lista con la nueva calidad, en la misma pista y el mismo punto. */
+    fun aplicarCalidad() {
+        val s = session ?: return
+        val p = s.player
+        if (p.mediaItemCount == 0) return
+        val nuevos = (0 until p.mediaItemCount).map {
+            val m = p.getMediaItemAt(it)
+            Biblioteca.lib[m.mediaId]?.let { v -> Biblioteca.itemDe(v) } ?: m
+        }
+        p.setMediaItems(nuevos, p.currentMediaItemIndex, p.currentPosition)
+        p.prepare()
     }
 
     /** Texto de diagnóstico del reproductor (hilo principal). */

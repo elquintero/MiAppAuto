@@ -222,6 +222,15 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun getCovers(): String = Caratulas.todasMiniaturas(applicationContext)
 
+        @JavascriptInterface
+        fun getQuality(): String = Calidad.elegida
+
+        @JavascriptInterface
+        fun setQuality(nivel: String) {
+            Calidad.guardar(applicationContext, nivel)
+            runOnUiThread { MusicService.instancia?.aplicarCalidad() }
+        }
+
         // Diagnóstico: reúne el estado del reproductor y descarga las listas del stream actual
         @JavascriptInterface
         fun diag() {

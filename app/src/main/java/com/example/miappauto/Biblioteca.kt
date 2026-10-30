@@ -54,6 +54,7 @@ object Biblioteca {
     @Synchronized
     fun cargar(ctx: Context) {
         Caratulas.cargar(ctx)
+        Calidad.cargar(ctx)
         if (cargado) return
         cargado = true
         val f = File(ctx.filesDir, ARCHIVO)
@@ -114,12 +115,12 @@ object Biblioteca {
     fun idContexto(ctx: String, k: String, perf: String? = null): String =
         if (perf == null) "$ctx$SEP$k" else "$ctx$SEP$perf$SEP$k"
 
-    fun itemDe(v: Video, id: String = v.k): MediaItem {
+    fun itemDe(v: Video, id: String = v.k, url: String = Calidad.aplicar(v.url)): MediaItem {
         val album = listOf(v.stage, v.edition).filter { it.isNotEmpty() }
             .joinToString(" · ").ifEmpty { "Concurso Chopin" }
         return MediaItem.Builder()
             .setMediaId(id)
-            .setUri(v.url)
+            .setUri(url)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setMediaMetadata(
                 MediaMetadata.Builder()
