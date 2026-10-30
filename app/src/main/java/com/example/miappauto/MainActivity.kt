@@ -17,6 +17,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -55,6 +57,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Biblioteca.cargar(applicationContext)
+        Descargas.iniciar(applicationContext)
 
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -84,6 +87,7 @@ class MainActivity : ComponentActivity() {
             loadUrl("file:///android_asset/index.html")
         }
         setContentView(web)
+        Descargas.alCambiar = { notificarDescargas() }
     }
 
     override fun onStart() {
@@ -121,6 +125,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        Descargas.alCambiar = null
         web.destroy()
         super.onDestroy()
     }
@@ -138,6 +143,11 @@ class MainActivity : ComponentActivity() {
         web.evaluateJavascript(
             "window.__cover&&__cover(${JSONObject.quote(perf)},${JSONObject.quote(mini)})", null
         )
+    }
+
+    // Muestra en la página el estado de las descargas
+    private fun notificarDescargas() {
+        web.evaluateJavascript("window.__dl&&__dl(${JSONObject.quote(Descargas.resumen())})", null)
     }
 
     private fun reproducir(i: Int) {
@@ -222,12 +232,81 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun getCovers(): String = Caratulas.todasMiniaturas(applicationContext)
 
+        // Prueba de audio: reproduce una dirección pegada a mano, sin pasar por la biblioteca
+        @JavascriptInterface
+        fun playUrl(url: String) {
+            runOnUiThread {
+                val c = control
+                if (c == null) {
+                    Toast.makeText(this@MainActivity, "El reproductor no está listo, inténtalo de nuevo", Toast.LENGTH_SHORT).show()
+                } else {
+                    Diagnostico.urlPrueba = url.trim()
+                    val item = MediaItem.Builder()
+                        .setMediaId("prueba")
+                        .setUri(url.trim())
+                        .setMimeType(MimeTypes.APPLICATION_M3U8)
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle("Prueba de audio")
+                                .setArtist("Dirección pegada a mano")
+                                .build()
+                        )
+                        .build()
+                    c.setMediaItem(item)
+                    c.prepare()
+                    c.play()
+                }
+            }
+        }
+
+        // Descargas para oír sin datos
+        @JavascriptInterface
+        fun downloadQueue() {
+            runOnUiThread {
+                val n = Descargas.pedir(Biblioteca.queue.mapNotNull { Biblioteca.lib[it] })
+                Toast.makeText(this@MainActivity, "Descargando $n pistas cuando haya Wi-Fi", Toast.LENGTH_SHORT).show()
+                notificarDescargas()
+            }
+        }
+
+        @JavascriptInterface
+        fun downloadPerf(perf: String) {
+            runOnUiThread {
+                val n = Descargas.pedir(Biblioteca.delInterprete(perf))
+                Toast.makeText(this@MainActivity, "Descargando $n pistas cuando haya Wi-Fi", Toast.LENGTH_SHORT).show()
+                notificarDescargas()
+            }
+        }
+
+        @JavascriptInterface
+        fun clearDownloads() {
+            runOnUiThread {
+                Descargas.borrarTodo()
+                notificarDescargas()
+            }
+        }
+
+        @JavascriptInterface
+        fun downloadStatus() {
+            runOnUiThread { notificarDescargas() }
+        }
+
+        @JavascriptInterface
+        fun getOfflineMode(): Boolean = Descargas.modoSinDatos
+
+        @JavascriptInterface
+        fun setOfflineMode(valor: Boolean) {
+            Descargas.fijarModoSinDatos(applicationContext, valor)
+            runOnUiThread { notificarDescargas() }
+        }
+
         @JavascriptInterface
         fun getQuality(): String = Calidad.elegida
 
         @JavascriptInterface
         fun setQuality(nivel: String) {
             Calidad.guardar(applicationContext, nivel)
+            Diagnostico.reiniciar()
             runOnUiThread { MusicService.instancia?.aplicarCalidad() }
         }
 
@@ -238,7 +317,8 @@ class MainActivity : ComponentActivity() {
                 val estado = MusicService.instancia?.textoDiagnostico()
                     ?: "El servicio de reproducción no está iniciado. Reproduce algo y vuelve a probar."
                 val id = control?.currentMediaItem?.mediaId ?: Biblioteca.queue.firstOrNull()
-                val url = id?.let { Biblioteca.lib[it]?.url } ?: Biblioteca.lib.values.firstOrNull()?.url
+                val url = if (id == "prueba") Diagnostico.urlPrueba
+                else (id?.let { Biblioteca.lib[it]?.url } ?: Biblioteca.lib.values.firstOrNull()?.url)
                 Thread {
                     val texto = estado + "\n\n" + Diagnostico.listas(url)
                     runOnUiThread {

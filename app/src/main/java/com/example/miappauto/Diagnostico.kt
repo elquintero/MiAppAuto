@@ -18,6 +18,7 @@ object Diagnostico {
         var msTotal = 0L
         var msMax = 0L
         var formato = ""
+        var contenidoMs = 0L
     }
 
     private val acumulado = LinkedHashMap<String, Acum>()
@@ -25,6 +26,10 @@ object Diagnostico {
     private val hora = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     private var errores = 0
     private var ultimoError = ""
+
+    /** Dirección pegada a mano en la prueba de audio. */
+    @Volatile
+    var urlPrueba: String? = null
 
     @Synchronized
     fun evento(texto: String) {
@@ -56,12 +61,13 @@ object Diagnostico {
     }
 
     @Synchronized
-    fun carga(tipoPista: Int, tipoDato: Int, bytes: Long, ms: Long, formato: String?) {
+    fun carga(tipoPista: Int, tipoDato: Int, bytes: Long, ms: Long, formato: String?, contenidoMs: Long = 0L) {
         val clave = "${nombreDato(tipoDato)} · ${nombreTipo(tipoPista)}"
         val a = acumulado.getOrPut(clave) { Acum() }
         a.cargas++
         a.bytes += bytes
         a.msTotal += ms
+        a.contenidoMs += contenidoMs
         if (ms > a.msMax) a.msMax = ms
         if (!formato.isNullOrEmpty()) a.formato = formato
     }
@@ -73,6 +79,14 @@ object Diagnostico {
         evento("error de red: $texto")
     }
 
+    @Synchronized
+    fun reiniciar() {
+        acumulado.clear()
+        errores = 0
+        ultimoError = ""
+        evento("contadores a cero")
+    }
+
     /** Estado actual del reproductor. Debe llamarse desde el hilo principal. */
     @Synchronized
     fun estado(p: Player): String {
@@ -82,6 +96,7 @@ object Diagnostico {
         sb.append("Buffer por delante: ${p.totalBufferedDuration / 1000.0} s\n")
         sb.append("Pistas en la lista: ${p.mediaItemCount}\n")
         sb.append("Calidad elegida: ${Calidad.elegida}  ·  no existentes: ${Calidad.inexistentes()}\n")
+        sb.append("Sin conexión: ${Descargas.resumen()}\n")
 
         sb.append("\nPistas que ofrece el stream:\n")
         var hay = false
@@ -99,7 +114,7 @@ object Diagnostico {
         }
         if (!hay) sb.append(" (ninguna todavía)\n")
 
-        sb.append("\nDescargas desde que arrancó el servicio:\n")
+        sb.append("\nDescargas desde que arrancó el servicio o se puso a cero:\n")
         if (acumulado.isEmpty()) sb.append(" (ninguna)\n")
         for ((clave, a) in acumulado) {
             val mb = a.bytes / 1_048_576.0
@@ -107,6 +122,10 @@ object Diagnostico {
             val kbps = if (a.msTotal > 0) a.bytes * 8 / a.msTotal else 0
             sb.append(" - $clave: ${a.cargas} cargas, ${"%.2f".format(mb)} MB, ")
             sb.append("media $media ms, máx ${a.msMax} ms, ~$kbps kbps efectivos\n")
+            if (a.contenidoMs > 0 && clave.startsWith("segmentos")) {
+                val kb = a.bytes * 8 / a.contenidoMs
+                sb.append("     contenido: ${a.contenidoMs / 1000} s de música -> ~$kb kbps, ~${"%.1f".format(kb * 0.0075)} MB por minuto\n")
+            }
             if (a.formato.isNotEmpty()) sb.append("     formato: ${a.formato}\n")
         }
         val conVideo = acumulado.any { it.key.contains("segmentos") && it.key.contains("vídeo") && it.value.cargas > 0 }
@@ -132,7 +151,9 @@ object Diagnostico {
         val texto = principal.first
         val esMaestra = texto.contains("#EXT-X-STREAM-INF") || texto.contains("#EXT-X-MEDIA")
         sb.append("== LISTA PRINCIPAL (${principal.second} ms) ==\n$url\n")
-        sb.append(if (esMaestra) "Tipo: LISTA MAESTRA (varias calidades)\n\n" else "Tipo: lista de una sola calidad\n\n")
+        sb.append(if (esMaestra) "Tipo: LISTA MAESTRA (varias calidades)\n" else "Tipo: lista de una sola calidad\n")
+        AudioDirecto.derivar(url)?.let { sb.append("Audio directo que usa la app: $it\n") }
+        sb.append("\n")
         if (esMaestra) {
             sb.append(texto.take(4500))
         } else {

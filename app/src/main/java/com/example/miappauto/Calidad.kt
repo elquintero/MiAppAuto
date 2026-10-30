@@ -9,7 +9,7 @@ import android.content.Context
  */
 object Calidad {
 
-    val niveles = listOf("240p", "360p", "480p", "720p", "1080p", "2160p")
+    val niveles = listOf("360p", "480p", "720p", "1080p", "2160p")
     const val ORIGINAL = "original"
 
     private val patron = Regex("/(\\d{3,4}p)\\.m3u8")

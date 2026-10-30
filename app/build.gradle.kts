@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.miappauto"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "7.0"
+        versionCode = 9
+        versionName = "9.0"
     }
 
     compileOptions {
@@ -30,4 +30,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
+    implementation("androidx.media3:media3-datasource:1.4.1")
+    implementation("androidx.media3:media3-database:1.4.1")
 }

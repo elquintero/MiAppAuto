@@ -110,9 +110,13 @@ class MusicService : MediaLibraryService() {
             val resultado: MediaSession.MediaItemsWithStartPosition =
                 if (mediaItems.size == 1) {
                     elegida(mediaSession.player, mediaItems[0])
-                        ?: MediaSession.MediaItemsWithStartPosition(
-                            mediaItems, startIndex, startPositionMs
-                        )
+                        ?: run {
+                            // Dirección suelta (por ejemplo, la prueba de audio): no pertenece a ninguna lista
+                            playlistEsCola = false
+                            MediaSession.MediaItemsWithStartPosition(
+                                mediaItems, startIndex, startPositionMs
+                            )
+                        }
                 } else {
                     playlistEsCola = true
                     MediaSession.MediaItemsWithStartPosition(
@@ -185,6 +189,7 @@ class MusicService : MediaLibraryService() {
         super.onCreate()
         instancia = this
         Biblioteca.cargar(applicationContext)
+        Descargas.iniciar(applicationContext)
 
         // Más margen de red: tiempos de espera largos y buffer amplio (útil con cobertura irregular en carretera)
         val http = DefaultHttpDataSource.Factory()
@@ -198,7 +203,7 @@ class MusicService : MediaLibraryService() {
             .build()
 
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(http))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(Descargas.fabricaReproduccion()))
             .setLoadControl(carga)
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -233,6 +238,8 @@ class MusicService : MediaLibraryService() {
             // Enlace caducado o caído: pasa al siguiente, y se detiene tras tres fallos seguidos
             override fun onPlayerError(error: PlaybackException) {
                 Diagnostico.evento("ERROR ${error.errorCodeName}: ${error.message}")
+                // 0) El audio directo fue rechazado por el servidor: se vuelve a la dirección original
+                if (codigoHttp(error) != null && audioDirectoFalla(player)) return
                 // 1) La calidad elegida no existe en el servidor (error 404): se prueba otra
                 if (codigoHttp(error) == 404 && subirCalidad(player)) return
                 // 2) Se perdió la conexión (túnel, cambio de antena...): se reintenta la MISMA pista
@@ -246,7 +253,9 @@ class MusicService : MediaLibraryService() {
                     }
                 }
                 fallos++
-                if (fallos < 3 && player.mediaItemCount > 1) {
+                // En modo sin datos se saltan las pistas no descargadas, hasta recorrer toda la lista
+                val limite = if (Descargas.modoSinDatos) player.mediaItemCount else 3
+                if (fallos < limite && player.mediaItemCount > 1) {
                     player.seekToNextMediaItem()
                     player.prepare()
                     player.play()
@@ -268,7 +277,10 @@ class MusicService : MediaLibraryService() {
                     mediaLoadData.dataType,
                     loadEventInfo.bytesLoaded,
                     loadEventInfo.loadDurationMs,
-                    resumen
+                    resumen,
+                    if (mediaLoadData.mediaStartTimeMs >= 0 &&
+                        mediaLoadData.mediaEndTimeMs > mediaLoadData.mediaStartTimeMs
+                    ) mediaLoadData.mediaEndTimeMs - mediaLoadData.mediaStartTimeMs else 0L
                 )
             }
 
@@ -284,6 +296,19 @@ class MusicService : MediaLibraryService() {
         })
 
         session = MediaLibrarySession.Builder(this, player, callback).build()
+    }
+
+    private fun audioDirectoFalla(p: Player): Boolean {
+        val item = p.currentMediaItem ?: return false
+        val video = Biblioteca.lib[item.mediaId] ?: return false
+        val uri = item.localConfiguration?.uri?.toString() ?: return false
+        if (AudioDirecto.derivar(video.url) != uri) return false
+        AudioDirecto.marcarFallo(video.k)
+        Diagnostico.evento("el audio directo fue rechazado; se usa la dirección original")
+        p.replaceMediaItem(p.currentMediaItemIndex, Biblioteca.itemDe(video))
+        p.prepare()
+        p.play()
+        return true
     }
 
     private fun codigoHttp(e: Throwable?): Int? {

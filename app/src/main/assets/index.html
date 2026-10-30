@@ -415,7 +415,27 @@ const APP=!!window.AndroidBridge; // true solo dentro de la app Android
 let COV={};if(APP){try{COV=JSON.parse(AndroidBridge.getCovers()||'{}')}catch(e){}}
 window.__cover=(p,d)=>{if(d)COV[p]=d;else delete COV[p];render()};
 window.__diag=t=>{let a=document.getElementById('diagBox');if(!a){a=document.createElement('textarea');a.id='diagBox';a.readOnly=true;a.style.cssText='position:fixed;left:3%;top:9%;width:94%;height:82%;z-index:99;background:#111;color:#eee;font:11px monospace;padding:8px';const c=document.createElement('button');c.id='diagX';c.textContent='Cerrar';c.style.cssText='position:fixed;right:4%;top:2%;z-index:100;padding:8px 14px';c.onclick=()=>{a.remove();c.remove()};document.body.append(a,c)}a.value=t};
-if(APP){const bar=document.createElement('div');bar.style.cssText='position:fixed;right:8px;bottom:8px;z-index:9;display:flex;gap:6px;align-items:center;background:#fffd;padding:6px;border-radius:8px;color:#000';const sel=document.createElement('select');['240p','360p','480p','720p','1080p','2160p','original'].forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n==='original'?'Calidad original':'Calidad '+n;sel.append(o)});try{sel.value=AndroidBridge.getQuality()}catch(e){}sel.onchange=()=>AndroidBridge.setQuality(sel.value);const b=document.createElement('button');b.textContent='Diagnóstico';b.style.padding='6px 10px';b.onclick=()=>{window.__diag('Recopilando datos… (puede tardar unos segundos)');AndroidBridge.diag()};bar.append(sel,b);document.body.append(bar)}
+if(APP){
+const bar=document.createElement('div');
+bar.style.cssText='position:fixed;right:8px;bottom:54px;z-index:9;display:none;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;background:#fffe;padding:8px;border-radius:8px;color:#000;max-width:92vw';
+const mk=(txt,fn)=>{const x=document.createElement('button');x.textContent=txt;x.style.padding='6px 10px';x.onclick=fn;return x};
+const sel=document.createElement('select');
+[['360p','360p · ~2 MB/min'],['480p','480p · ~4 MB/min'],['720p','720p'],['1080p','1080p · ~8 MB/min'],['2160p','2160p · ~135 MB/min'],['original','Original']].forEach(([v,n])=>{const o=document.createElement('option');o.value=v;o.textContent='Calidad '+n;sel.append(o)});
+try{sel.value=AndroidBridge.getQuality()}catch(e){}
+sel.onchange=()=>AndroidBridge.setQuality(sel.value);
+const u=document.createElement('input');u.type='text';u.value='https://n-4-6.dcs.redcdn.pl/livehls/o2/NIFC/live/konkurs_2025.livx/playlist.m3u8?bitrate=320000&audioId=1&lang=pol&startTime=782851838008&stopTime=782851934000&renditions';u.style.width='120px';
+const lb=document.createElement('label');const ck=document.createElement('input');ck.type='checkbox';
+try{ck.checked=AndroidBridge.getOfflineMode()}catch(e){}
+ck.onchange=()=>AndroidBridge.setOfflineMode(ck.checked);
+lb.append(ck,document.createTextNode(' Sin datos (solo lo descargado)'));
+const st=document.createElement('span');st.style.cssText='font-size:12px;width:100%;text-align:right';
+window.__dl=t=>{st.textContent=t};
+bar.append(sel,mk('Diagnóstico',()=>{window.__diag('Recopilando datos… (puede tardar unos segundos)');AndroidBridge.diag()}),u,mk('Probar audio',()=>AndroidBridge.playUrl(u.value)),mk('Descargar cola (Wi-Fi)',()=>AndroidBridge.downloadQueue()),mk('Borrar descargas',()=>{if(confirm('¿Borrar todas las descargas?'))AndroidBridge.clearDownloads()}),lb,st);
+const g=mk('⚙',()=>{bar.style.display=bar.style.display==='none'?'flex':'none'});
+g.style.cssText='position:fixed;right:8px;bottom:8px;z-index:10;padding:8px 14px;font-size:18px';
+document.body.append(bar,g);
+try{AndroidBridge.downloadStatus()}catch(e){}
+}
 const save=()=>{const s=JSON.stringify({lib,queue,cur,shuffle,repeat});try{localStorage.setItem(KEY,s)}catch(e){}try{if(APP)AndroidBridge.sync(s)}catch(e){}};
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){lib=d.lib||{};queue=(d.queue||[]).filter(k=>lib[k]);cur=Math.min(d.cur??-1,queue.length-1);shuffle=!!d.shuffle;repeat=d.repeat!==false}}catch(e){}}
 function msg(t,err){const m=$('#msg');m.textContent=t||'';m.className=err?'err':''}
@@ -546,6 +566,7 @@ function render(){
     tl.append(pa,ad,rm);
     if(APP){
       const cv=document.createElement('button');cv.textContent='Carátula';cv.onclick=()=>AndroidBridge.pickCover(name);tl.append(cv);
+      const dl=document.createElement('button');dl.textContent='Descargar (Wi-Fi)';dl.onclick=()=>AndroidBridge.downloadPerf(name);tl.append(dl);
       if(COV[name]){const qc=document.createElement('button');qc.textContent='Quitar carátula';qc.onclick=()=>AndroidBridge.removeCover(name);tl.append(qc)}
     }
     d.append(tl);

@@ -115,7 +115,10 @@ object Biblioteca {
     fun idContexto(ctx: String, k: String, perf: String? = null): String =
         if (perf == null) "$ctx$SEP$k" else "$ctx$SEP$perf$SEP$k"
 
-    fun itemDe(v: Video, id: String = v.k, url: String = Calidad.aplicar(v.url)): MediaItem {
+    /** Dirección que se reproduce (o se descarga) para una pista, según audio directo y calidad elegida. */
+    fun urlReproduccion(v: Video): String = AudioDirecto.urlPara(v) ?: Calidad.aplicar(v.url)
+
+    fun itemDe(v: Video, id: String = v.k, url: String = urlReproduccion(v)): MediaItem {
         val album = listOf(v.stage, v.edition).filter { it.isNotEmpty() }
             .joinToString(" · ").ifEmpty { "Concurso Chopin" }
         return MediaItem.Builder()
